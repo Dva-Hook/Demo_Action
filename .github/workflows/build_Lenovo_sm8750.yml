@@ -88,15 +88,17 @@ jobs:
            if [ -z "${{ env.CUSTOM_KERNEL_SUFFIX }}" ]; then
             case "${{ env.KERNEL_VERSION }}" in
               "6.6.56")
-                echo 'DEFAULT_SUFFIX=-android15-8-g38447e018c92-ab12829524-4k' >> $GITHUB_ENV
+                DEFAULT_SUFFIX='-android15-8-g38447e018c92-ab12829524-4k'
                 ;;
               "6.6.89")
-                echo 'DEFAULT_SUFFIX=-android15-8-g14220ae4ce65-ab13680582-4k' >> $GITHUB_ENV
+                DEFAULT_SUFFIX='-android15-8-g14220ae4ce65-ab13680582-4k'
                 ;;
               "6.6.102")
-                echo 'DEFAULT_SUFFIX=-android15-8-g06bc416365ef-ab14559830-4k' >> $GITHUB_ENV
+                DEFAULT_SUFFIX='-android15-8-g06bc416365ef-ab14559830-4k'
                 ;;
             esac
+            echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
+            echo "使用原官核名称：$DEFAULT_SUFFIX"
           else
             echo "使用自定义名称: ${{ env.CUSTOM_KERNEL_SUFFIX }}"
             echo "DEFAULT_SUFFIX=${{ env.CUSTOM_KERNEL_SUFFIX }}" >> $GITHUB_ENV
@@ -104,15 +106,17 @@ jobs:
           if [ -z "${{ env.CUSTOM_KERNEL_TIME }}" ]; then
             case "${{ env.KERNEL_VERSION }}" in
               6.6.56)
-                echo 'KERNEL_TIME=Thu Dec 19 17:58:46 UTC 2024' >> $GITHUB_ENV
+                KERNEL_TIME='Thu Dec 19 17:58:46 UTC 2024'
                 ;;
               6.6.89)
-                echo 'KERNEL_TIME=Mon Jun 23 07:30:57 UTC 2025' >> $GITHUB_ENV
+                KERNEL_TIME='Mon Jun 23 07:30:57 UTC 2025'
                 ;;
               6.6.102)
-                echo 'KERNEL_TIME=Tue Dec 9 15:43:22 UTC 2025' >> $GITHUB_ENV
+                KERNEL_TIME='Tue Dec 9 15:43:22 UTC 2025'
                 ;;
             esac
+            echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
+            echo "使用官核时间：$KERNEL_TIME"
           else
             echo "使用自定义构建时间: ${{ env.CUSTOM_KERNEL_TIME }}"
             echo "KERNEL_TIME=${{ env.CUSTOM_KERNEL_TIME }}" >> $GITHUB_ENV

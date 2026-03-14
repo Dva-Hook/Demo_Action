@@ -139,16 +139,17 @@ jobs:
           if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
              oneplus_pad_2_pro)
-              echo 'DEFAULT_SUFFIX=-android15-8-g5a0ffb447c1d-ab13771415-4k' >> $GITHUB_ENV
+                DEFAULT_SUFFIX='-android15-8-g5a0ffb447c1d-ab13771415-4k'
               ;;
             oneplus_ace5_ultra | realme_GT7)
-              echo 'DEFAULT_SUFFIX=-android15-8-g29d86c5fc9dd-abogki428889875-4k' >> $GITHUB_ENV
+                DEFAULT_SUFFIX='-android15-8-g29d86c5fc9dd-abogki428889875-4k'
               ;;
             oneplus_13 | oneplus_ace5_pro | oneplus_ace_6 | oneplus_13t | realme_GT7pro | realme_GT7pro_Speed | realme_GT8)
-              echo 'DEFAULT_SUFFIX=-android15-8-gf4dc45704e54-abogki446052083-4k' >> $GITHUB_ENV
+                DEFAULT_SUFFIX='-android15-8-gf4dc45704e54-abogki446052083-4k'
               ;;
           esac
-            echo "使用原官核名称：${{ env.DEFAULT_SUFFIX }}"
+            echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
+            echo "使用原官核名称：$DEFAULT_SUFFIX"
           else
             echo "使用自定义名称: ${{ github.event.inputs.custom_kernel_suffix }}"
             echo "DEFAULT_SUFFIX=${{ github.event.inputs.custom_kernel_suffix }}" >> $GITHUB_ENV
@@ -156,16 +157,17 @@ jobs:
           if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
               oneplus_pad_2_pro)
-                echo 'KERNEL_TIME=Fri Jul 11 22:46:09 UTC 2025' >> $GITHUB_ENV
+                  KERNEL_TIME='Fri Jul 11 22:46:09 UTC 2025'
                 ;;
               oneplus_ace5_ultra | realme_GT7)
-                echo 'KERNEL_TIME=Tue Jul  1 19:48:18 UTC 2025' >> $GITHUB_ENV
+                  KERNEL_TIME='Tue Jul  1 19:48:18 UTC 2025'
                 ;;
               oneplus_13 | oneplus_ace5_pro | oneplus_ace_6 | oneplus_13t | realme_GT7pro | realme_GT7pro_Speed | realme_GT8)
-                echo 'KERNEL_TIME=Fri Sep 19 06:13:40 UTC 2025' >> $GITHUB_ENV
+                  KERNEL_TIME='Fri Sep 19 06:13:40 UTC 2025'
                 ;;
             esac
-            echo "使用官核时间: ${{ env.KERNEL_TIME }}"
+            echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
+            echo "使用官核时间：$KERNEL_TIME"
           else
             echo "使用自定义构建时间: ${{ github.event.inputs.custom_kernel_time }}"
             echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
