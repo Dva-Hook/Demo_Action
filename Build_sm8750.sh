@@ -36,6 +36,7 @@ case $device_choice in
     1)
         DEVICE_NAME="oneplus_13"
         REPO_BRANCH="sm8750_b_16.0.0_oneplus_13"
+        REPO_MANIFEST="sm8750_b_16.0.0_oneplus_13"
         KERNEL_TIME="Fri Sep 19 06:13:40 UTC 2025"
         KERNEL_SUFFIX="-android15-8-gf4dc45704e54-abogki446052083-4k"
         SCHED_FILE="oneplus_13_b"
@@ -43,6 +44,7 @@ case $device_choice in
     2)
         DEVICE_NAME="oneplus_ace5_pro"
         REPO_BRANCH="sm8750_b_16.0.0_oneplus_ace5_pro"
+        REPO_MANIFEST="sm8750_b_16.0.0_oneplus_ace5_pro"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
         SCHED_FILE="oneplus_ace5_pro_b"
@@ -50,6 +52,7 @@ case $device_choice in
     3)
         DEVICE_NAME="oneplus_ace5_pro"
         REPO_BRANCH="sm8750_b_16.0.0_oneplus_ace5_pro"
+        REPO_MANIFEST="sm8750_b_16.0.0_oneplus_ace5_pro"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
         SCHED_FILE="oneplus_ace5_pro_b"
@@ -57,6 +60,7 @@ case $device_choice in
     4)
         DEVICE_NAME="oneplus_ace6"
         REPO_BRANCH="sm8750_b_16.0.0_ace_6"
+        REPO_MANIFEST="sm8750_b_16.0.0_ace_6"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
         SCHED_FILE="oneplus_ace_6"
@@ -64,12 +68,14 @@ case $device_choice in
     5)
         DEVICE_NAME="oneplus_pad_2_pro"
         REPO_BRANCH="oneplus_pad_2_pro.xml"
+        REPO_MANIFEST="oneplus_pad_2_pro"
         KERNEL_TIME="Fri Jul 11 22:46:09 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g5a0ffb447c1d-ab13771415-4k"   
         ;;
     6)
         DEVICE_NAME="oneplus_ace5_ultra"
         REPO_BRANCH="mt6991_v_15.0.2_ace5_ultra"
+        REPO_MANIFEST="mt6991_v_15.0.2_ace5_ultra"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
         SCHED_FILE="oneplus_ace5_ultra"
@@ -77,27 +83,31 @@ case $device_choice in
     7)
         DEVICE_NAME="realme_GT7"
         REPO_BRANCH="sm8750_b_16.0.0_oneplus_ace5_pro"
+        REPO_MANIFEST="sm8750_b_16.0.0_oneplus_ace5_pro"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
         SCHED_FILE="oneplus_ace5_pro_b"
         ;;
     8)
         DEVICE_NAME="realme_GT7pro"
+        REPO_MANIFEST="master"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
-        SCHED_FILE="none"
+        SCHED_FILE="oneplus_ace_6"
         ;;
     9)
         DEVICE_NAME="realme_GT7pro_Speed"
+        REPO_MANIFEST="master"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
-        SCHED_FILE="none"
+        SCHED_FILE="oneplus_ace_6"
         ;;
     10)
         DEVICE_NAME="realme_GT8"
+        REPO_MANIFEST="master"
         KERNEL_TIME="Tue Jul  1 19:48:18 UTC 2025"
         KERNEL_SUFFIX="-android15-8-g29d86c5fc9dd-abogki428889875-4k"
-        SCHED_FILE="none"
+        SCHED_FILE="oneplus_ace_6"
         ;;
     *)
         error "无效的选择，请输入1-10之间的数字"
@@ -161,13 +171,13 @@ sudo apt-mark hold libc-bin
 sudo apt purge man-db 
 sudo rm -rf /var/lib/man-db/auto-update 
 sudo apt update 
-sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full aria2c
+ sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full aria2 unzip
 info "正在克隆源码仓库..."
-if [ "${DEVICES_NAME}" = "realme_GT7pro" ] || [ "${DEVICES_NAME}" = "realme_GT7pro_Speed" ] || [ "${DEVICES_NAME}" = "realme_GT8" ]; then
-  aria2c -s16 -x16 -k1M https://github.com/realme-kernel-opensource/realme_GT7pro-AndroidB-common-source/archive/refs/heads/master.zip -o common.zip
+ if [ "${DEVICE_NAME}" = "realme_GT7pro" ] || [ "${DEVICE_NAME}" = "realme_GT7pro_Speed" ] || [ "${DEVICE_NAME}" = "realme_GT8" ]; then
+  aria2c -s16 -x16 -k1M https://github.com/realme-kernel-opensource/realme_GT8pro-AndroidB-common-source/archive/refs/heads/master.zip -o common.zip
   unzip -q common.zip  
   mv "realme_GT7pro-AndroidB-common-source-master" common
-elif [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICES_NAME}" = "realme_GT7" ]; then
+ elif [ "${DEVICE_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICE_NAME}" = "realme_GT7" ]; then
   aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6991/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
   unzip -q common.zip  
   mv "android_kernel_oneplus_mt6991-oneplus-${REPO_MANIFEST}" common
