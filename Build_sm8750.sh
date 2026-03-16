@@ -22,9 +22,6 @@ ENABLE_KPM=true
 info "请选择要编译的分支："
 info "1. ReSukiSU"
 info "2. SukiSU-Ultra"
-read -p "输入选择 [1-2]: " KSU_TYPE
-
-# 读取用户选择
 read -p "输入选择 [1-2]: " ksu_choice
 
 # 根据选择设置分支名称
@@ -272,7 +269,7 @@ patch -p1 < 002-zstd.patch || true
 
 #开启BBG基带守护
 if [ "$ENABLE_BBG" = true ]; then
-  cd $KERNEL_WORKSPAC/common
+  cd $KERNEL_WORKSPACE/common
   echo "正在启用BBG基带守护…"
   curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
   sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./security/Kconfig
