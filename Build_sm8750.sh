@@ -14,8 +14,34 @@ error() {
   exit 1
 }
 
+
 # 参数设置
 ENABLE_KPM=true
+
+# 分支选择
+info "请选择要编译的分支："
+info "1. ReSukiSU"
+info "2. SukiSU-Ultra"
+read -p "输入选择 [1-2]: " KSU_TYPE
+
+# 读取用户选择
+read -p "输入选择 [1-2]: " ksu_choice
+
+# 根据选择设置分支名称
+case $ksu_choice in
+  1)
+    KSU_TYPE="ReSukiSU"
+    info "已选择：ReSukiSU"
+    ;;
+  2)
+    KSU_TYPE="SukiSU-Ultra"
+    info "已选择：SukiSU-Ultra"
+    ;;
+  *)
+    error "无效的选择，请输入 1-2"
+    ;;
+esac
+
 
 # 机型选择
 info "请选择要编译的机型："
@@ -204,13 +230,17 @@ for f in common/scripts/setlocalversion; do
   sed -i 's/ -dirty//g' "$f"
   sed -i '$i res=$(info "$res" | sed '\''s/-dirty//g'\'')' "$f"
 done
+cd "$KERNEL_WORKSPACE" || error "无法进入kernel_workspace目录"
 
 # 环境变量 - 按机型区分ccache目录
 export CCACHE_COMPILERCHECK="%compiler% -dumpmachine; %compiler% -dumpversion"
 export CCACHE_NOHASHDIR="true"
 export CCACHE_HARDLINK="true"
-export CCACHE_DIR="$HOME/.ccache_${DEVICE_NAME}"  # 改为按机型区分
+# 按 KSU_TYPE 和 DEVICE_NAME 区分缓存目录（替换特殊字符为下划线）
+KSU_TYPE_SAFE=$(echo "${KSU_TYPE}" | tr '-' '_')
+export CCACHE_DIR="$HOME/.ccache_${KSU_TYPE_SAFE}_${DEVICE_NAME}"
 export CCACHE_MAXSIZE="8G"
+cd "$KERNEL_WORKSPACE" || error "无法进入kernel_workspace目录"
 
 # ccache 初始化标志文件也按机型区分
 CCACHE_INIT_FLAG="$CCACHE_DIR/.ccache_initialized"
@@ -218,20 +248,20 @@ CCACHE_INIT_FLAG="$CCACHE_DIR/.ccache_initialized"
 # 初始化 ccache（仅第一次）
 if command -v ccache >/dev/null 2>&1; then
     if [ ! -f "$CCACHE_INIT_FLAG" ]; then
-        info "第一次为${DEVICE_NAME}初始化ccache..."
+        info "第一次为${KSU_TYPE}/${DEVICE_NAME}初始化ccache..."
         mkdir -p "$CCACHE_DIR" || error "无法创建ccache目录"
         ccache -M "$CCACHE_MAXSIZE"
         touch "$CCACHE_INIT_FLAG"
     else
-        info "ccache (${DEVICE_NAME}) 已初始化，跳过..."
+        info "ccache (${KSU_TYPE}/${DEVICE_NAME}) 已初始化，跳过..."
     fi
 else
     info "未安装 ccache，跳过初始化"
 fi
+cd "$KERNEL_WORKSPACE" || error "无法进入kernel_workspace目录"
 
 #添加lz4 1.10.0 & zstd 1.5.7补丁
 info "正在添加lz4 1.10.0 & zstd 1.5.7补丁…"
-cd $KERNEL_WORKSPACE
 git clone https://github.com/cctv18/oppo_oplus_realme_sm8750.git
 cp ./oppo_oplus_realme_sm8750/zram_patch/001-lz4.patch ./common
 cp ./oppo_oplus_realme_sm8750/zram_patch/lz4armv8.S ./common/lib
@@ -242,7 +272,7 @@ patch -p1 < 002-zstd.patch || true
 
 #开启BBG基带守护
 if [ "$ENABLE_BBG" = true ]; then
-  cd $KERNEL_WORKSPACE/common
+  cd $KERNEL_WORKSPAC/common
   echo "正在启用BBG基带守护…"
   curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
   sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./security/Kconfig
@@ -250,77 +280,128 @@ else
   info "未启用BBG基带守护，跳过步骤...."
 fi
 
-# 设置SukiSU
-info "设置SukiSU..."
+# 设置KSU
+info "设置${KSU_TYPE}..."
 cd $KERNEL_WORKSPACE
-curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" -o setup.sh
-bash setup.sh susfs-main
-cd KernelSU
-KSU_VERSION=$(expr "$(git rev-list --count main)" + 37185 2>/dev/null || echo 114514)
+if [ "${KSU_TYPE}" = "ReSukiSU" ]; then
+  curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s main
+  cd ./KernelSU 
+  KSU_VERSION=$(expr $(git rev-list --count main) + 30700 2>/dev/null || echo 114514)
+else
+  curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/refs/heads/main/kernel/setup.sh" | bash -s builtin
+  cd ./KernelSU
+  GIT_COMMIT_HASH=$(git rev-parse --short=8 HEAD)
+  echo "当前提交哈希: $GIT_COMMIT_HASH"
+  export KSU_VERSION=$KSU_VERSION
+  for i in {1..3}; do
+    KSU_API_VERSION=$(curl -s "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/builtin/kernel/Kbuild" | 
+      grep -m1 "KSU_VERSION_API :=" | 
+      awk -F'= ' '{print $2}' | 
+      tr -d '[:space:]')
+    [ -n "$KSU_API_VERSION" ] && break
+    [ $i -lt 3 ] && sleep 1
+  done
+  [ -z "$KSU_API_VERSION" ] && KSU_API_VERSION="4.1.0"
+  echo "KSU_API_VERSION=$KSU_API_VERSION"
+  VERSION_DEFINITIONS=$'define get_ksu_version_full\nv\\$1-'"$GIT_COMMIT_HASH"$'-TG@qdykernel\nendef\n\nKSU_VERSION_API := '"$KSU_API_VERSION"$'\nKSU_VERSION_FULL := v'"$KSU_API_VERSION"$'-'"$GIT_COMMIT_HASH"$'-TG@qdykernel'
+
+  sed -i '/define get_ksu_version_full/,/endef/d' kernel/Kbuild
+  sed -i '/KSU_VERSION_API :=/d' kernel/Kbuild
+  sed -i '/KSU_VERSION_FULL :=/d' kernel/Kbuild
+  awk -v def="$VERSION_DEFINITIONS" '
+    /REPO_OWNER :=/ {print; print def; inserted=1; next}
+    1
+    END {if (!inserted) print def}
+  ' kernel/Kbuild > kernel/Kbuild.tmp && mv kernel/Kbuild.tmp kernel/Kbuild
+  KSU_VERSION=$(expr $(git rev-list --count main) + 37185 2>/dev/null || echo 114514)
+  grep -A10 "REPO_OWNER" kernel/Kbuild
+  grep "KSU_VERSION_FULL" kernel/Kbuild
+  echo "SukiSU版本号: v${KSU_API_VERSION}-${GIT_COMMIT_HASH}-TG@qdykernel"
+fi
 
 
 # 添加susfs补丁
 info "设置susfs..."
 cd $KERNEL_WORKSPACE
-git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android15-6.6
-git clone https://github.com/ShirkNeko/SukiSU_patch.git
+git clone --depth=1 https://github.com/cctv18/susfs4oki.git susfs4ksu -b oki-android15-6.6
+wget https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8750/main/other_patch/69_hide_stuff.patch -O ./common/69_hide_stuff.patch
 cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/
 cp ./susfs4ksu/kernel_patches/fs/* ./common/fs/
 cp ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-cp ./SukiSU_patch/69_hide_stuff.patch ./common/
 cd ./common
 patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
+patch -p1 -N -F 3 < 69_hide_stuff.patch || true
+echo "[OK] SUSFS 补丁处理流程全部完成"
 
 #设置config
 cd $KERNEL_WORKSPACE/common/arch/arm64/configs || error "进入configs目录失败"
 info "设置内核Config..."
-echo -e "CONFIG_KSU=y
-CONFIG_KPM=y
-CONFIG_CRYPTO_LZ4=y
-CONFIG_CRYPTO_LZ4HC=y
-CONFIG_CRYPTO_LZ4KD=y
-CONFIG_CRYPTO_ZSTD=y
-CONFIG_F2FS_FS_COMPRESSION=y
-CONFIG_F2FS_FS_LZ4=y
-CONFIG_F2FS_FS_LZ4HC=y
-CONFIG_F2FS_FS_ZSTD=y
-CONFIG_ZSMALLOC=y
-CONFIG_ZRAM=y
-CONFIG_ZRAM_WRITEBACK=y
-CONFIG_SWAP=y
-CONFIG_NET_SCH_FQ_CODEL=y
-CONFIG_NET_SCH_FQ=y
-CONFIG_NET_SCH_SFQ=y
-CONFIG_NET_SCH_HTB=y
-CONFIG_NET_SCH_TBF=y
-CONFIG_NET_SCH_SFB=y
-CONFIG_NET_SCH_RED=y
-CONFIG_NET_SCH_INGRESS=y
-CONFIG_DEFAULT_FQ_CODEL=y
-CONFIG_DEFAULT_NET_SCH='fq_codel'
-CONFIG_IP_ECN=y
-CONFIG_TCP_ECN=y
-CONFIG_IPV6_ECN=y
-CONFIG_IP_NF_TARGET_ECN=y
-CONFIG_KSU_SUSFS=y
-CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_PATH=y
-CONFIG_KSU_SUSFS_SUS_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_SUS_KSTAT=y
-CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-CONFIG_KSU_SUSFS_ENABLE_LOG=y
-CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-CONFIG_KSU_SUSFS_SUS_MAP=y
-CONFIG_TMPFS_XATTR=y
-CONFIG_TMPFS_POSIX_ACL=y
-CONFIG_TMPFS=y
-CONFIG_HEADERS_INSTALL=n" >> gki_defconfig
+# KSU 基础配置
+echo "CONFIG_KSU=y" >> gki_defconfig
+echo "CONFIG_KPM=y" >> gki_defconfig
+
+# ReSukiSU 特有配置
+if [ "${KSU_TYPE}" = "ReSukiSU" ]; then
+  echo "CONFIG_KSU_MULTI_MANAGER_SUPPORT=y" >> gki_defconfig
+  echo 'CONFIG_KSU_FULL_NAME_FORMAT="%TAG_NAME%-%COMMIT_SHA%-Re-TG@qdykernel"' >> gki_defconfig
+fi
+
+# 加密和压缩支持
+echo "CONFIG_CRYPTO_LZ4=y" >> gki_defconfig
+echo "CONFIG_CRYPTO_LZ4HC=y" >> gki_defconfig
+echo "CONFIG_CRYPTO_LZ4KD=y" >> gki_defconfig
+echo "CONFIG_CRYPTO_ZSTD=y" >> gki_defconfig
+echo "CONFIG_F2FS_FS_COMPRESSION=y" >> gki_defconfig
+echo "CONFIG_F2FS_FS_LZ4=y" >> gki_defconfig
+echo "CONFIG_F2FS_FS_LZ4HC=y" >> gki_defconfig
+echo "CONFIG_F2FS_FS_ZSTD=y" >> gki_defconfig
+
+# 内存管理
+echo "CONFIG_ZSMALLOC=y" >> gki_defconfig
+echo "CONFIG_ZRAM=y" >> gki_defconfig
+echo "CONFIG_ZRAM_WRITEBACK=y" >> gki_defconfig
+echo "CONFIG_SWAP=y" >> gki_defconfig
+
+# 网络调度器
+echo "CONFIG_NET_SCH_FQ_CODEL=y" >> gki_defconfig
+echo "CONFIG_NET_SCH_FQ=y" >> gki_defconfig
+echo "CONFIG_NET_SCH_SFQ=y" >> gki_defconfig
+echo "CONFIG_NET_SCH_HTB=y" >> gki_defconfig
+echo "CONFIG_NET_SCH_TBF=y" >> gki_defconfig
+echo "CONFIG_NET_SCH_SFB=y" >> gki_defconfig
+echo "CONFIG_NET_SCH_RED=y" >> gki_defconfig
+echo "CONFIG_NET_SCH_INGRESS=y" >> gki_defconfig
+echo "CONFIG_DEFAULT_FQ_CODEL=y" >> gki_defconfig
+echo 'CONFIG_DEFAULT_NET_SCH="fq_codel"' >> gki_defconfig
+
+# ECN 支持
+echo "CONFIG_IP_ECN=y" >> gki_defconfig
+echo "CONFIG_TCP_ECN=y" >> gki_defconfig
+echo "CONFIG_IPV6_ECN=y" >> gki_defconfig
+echo "CONFIG_IP_NF_TARGET_ECN=y" >> gki_defconfig
+
+# SUSFS 配置
+echo "CONFIG_KSU_SUSFS=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> gki_defconfig
+echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> gki_defconfig
+
+# TMPFS 支持
+echo "CONFIG_TMPFS_XATTR=y" >> gki_defconfig
+echo "CONFIG_TMPFS_POSIX_ACL=y" >> gki_defconfig
+echo "CONFIG_TMPFS=y" >> gki_defconfig
+echo "CONFIG_HEADERS_INSTALL=n" >> gki_defconfig
 
 # 返回主目录
 cd $KERNEL_WORKSPACE || error "返回主目录失败"
@@ -340,7 +421,7 @@ if [ "$ENABLE_SCX" = "true" ]; then
   if [ "$SCHED_FILE" = "none" ]; then
     echo "该机型自带风驰，跳过应用补丁"
   else
-    case "${DEVICES_NAME}" in
+    case "${DEVICE_NAME}" in
       oneplus_ace5_ultra|realme_GT7)
         SCHED_BRANCH="mt6991"
         ;;
@@ -369,7 +450,7 @@ else
   patch -p1 -F 3 < hmbird_patch.patch
   echo "OGKI转换GKI_patch完成"
 fi
-
+cd $KERNEL_WORKSPACE || error "返回主目录失败"
 # 构建内核
 info "开始构建内核..."
 WORKDIR="$(pwd)"
