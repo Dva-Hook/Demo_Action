@@ -259,10 +259,9 @@ cd "$KERNEL_WORKSPACE" || error "无法进入kernel_workspace目录"
 
 #添加lz4 1.10.0 & zstd 1.5.7补丁
 info "正在添加lz4 1.10.0 & zstd 1.5.7补丁…"
-git clone https://github.com/cctv18/oppo_oplus_realme_sm8750.git
-cp ./oppo_oplus_realme_sm8750/zram_patch/001-lz4.patch ./common
-cp ./oppo_oplus_realme_sm8750/zram_patch/lz4armv8.S ./common/lib
-cp ./oppo_oplus_realme_sm8750/zram_patch/002-zstd.patch ./common/
+curl -LSs https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8750/main/zram_patch/001-lz4.patch -o ./common/001-lz4.patch
+curl -LSs https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8750/main/zram_patch/lz4armv8.S -o ./common/lib/lz4armv8.S
+curl -LSs https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8750/main/zram_patch/002-zstd.patch -o ./common/002-zstd.patch
 cd ./common
 git apply -p1 < 001-lz4.patch || true
 patch -p1 < 002-zstd.patch || true
