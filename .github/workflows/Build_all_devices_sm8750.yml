@@ -708,7 +708,7 @@ jobs:
           rm -rf ./AnyKernel3/.git
           rm -rf ./AnyKernel3/push.sh
           cp kernel_workspace/common/out/arch/arm64/boot/Image ./AnyKernel3/
-          7z a -t7z -p'501b10728d2cb08abe16eb8b0bdee33c9d2382e1' -mhe=on ./AnyKernel3/TG 频道@qdykernel.7z ./AnyKernel3/Image
+          7z a -t7z -p'501b10728d2cb08abe16eb8b0bdee33c9d2382e1' -mhe=on "./AnyKernel3/TG频道@qdykernel.7z" ./AnyKernel3/Image
           rm -rf ./AnyKernel3/Image
           
       - name: 📤 Upload AnyKernel3 (上传 AnyKernel3)
