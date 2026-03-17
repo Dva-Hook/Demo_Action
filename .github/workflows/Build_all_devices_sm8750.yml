@@ -714,7 +714,7 @@ jobs:
       - name: 📤 Upload AnyKernel3 (上传 AnyKernel3)
         uses: actions/upload-artifact@v4
         with:
-         name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}_SuKiSU
+         name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}
          path: ./AnyKernel3/*
 
   collect_artifacts:
