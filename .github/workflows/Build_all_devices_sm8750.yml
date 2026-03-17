@@ -2,6 +2,8 @@ name: Build_All_Devices_SM8750
 permissions:
   contents: read
   actions: write
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 on:
   workflow_dispatch:
     inputs:
@@ -696,46 +698,47 @@ jobs:
           cd kernel_workspace/common/out/arch/arm64/boot
           cp ./Image "./${IMAGENAME}"
 
-      - name: 📤 Upload Image (上传 Image)
-        uses: actions/upload-artifact@v4
-        with:
-         name: Image_${{ matrix.device_name }}_${{ env.KSUVER }}
-         path: kernel_workspace/common/out/arch/arm64/boot/${{ env.IMAGENAME }}
-        
-      - name: 📦 Make AnyKernel3 (创建 Anykernel3)
+      - name: 📦 Prepare Artifacts (准备构建产物)
         run: |
-          git clone https://github.com/showdo/AnyKernel3.git --depth=1      
-          rm -rf ./AnyKernel3/.git
-          rm -rf ./AnyKernel3/push.sh
-          cp kernel_workspace/common/out/arch/arm64/boot/Image ./AnyKernel3/
-          7z a -t7z -p'501b10728d2cb08abe16eb8b0bdee33c9d2382e1' -mhe=on "./AnyKernel3/TG频道@qdykernel.7z" ./AnyKernel3/Image
-          rm -rf ./AnyKernel3/Image
-          
-      - name: 📤 Upload AnyKernel3 (上传 AnyKernel3)
+          mkdir -p ../artifacts/images ../artifacts/ak3
+          cp kernel_workspace/common/out/arch/arm64/boot/${IMAGENAME} ../artifacts/images/${IMAGENAME}
+
+      - name: 📤 Upload Image artifact (上传 Image)
         uses: actions/upload-artifact@v4
         with:
+<<<<<<< HEAD
          name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}
          path: ./AnyKernel3/*
+=======
+          name: img_${{ matrix.device_name }}
+          path: artifacts/images/${{ env.IMAGENAME }}
+          retention-days: 1
+>>>>>>> e630aaa4cf30d6aa35f4b3dda2ed8029e9077c20
 
   collect_artifacts:
     name: Collect_All_Artifacts
     needs: build_matrix
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Download all artifacts (下载所有构建产物)
-        uses: actions/download-artifact@v4
-        with:
-          path: ./all_artifacts
-          merge-multiple: false
+        - name: 📥 Download all Images (下载所有 Image)
+          uses: actions/download-artifact@v4
+          with:
+            pattern: img_*
+            path: ./images_output
+            merge-multiple: true
       
-      - name: 📦 List all artifacts (列出所有产物)
-        run: |
-          echo "=== 所有构建产物列表 ==="
-          find ./all_artifacts -type f | sort
-          echo "========================"
       
-      - name: 📤 Upload combined artifacts (上传合并后的总包)
-        uses: actions/upload-artifact@v4
-        with:
-          name: All_Devices_Build_Artifacts_${{ github.run_id }}
-          path: ./all_artifacts
+        - name: 📦 Create Images zip (打包所有 Image)
+          run: |
+            cd ./images_output
+            zip -r ../All_Images.zip .
+            cd ..
+            ls -lh All_Images.zip
+      
+      
+        - name: 📤 Upload All Images (上传所有 Image)
+          uses: actions/upload-artifact@v4
+          with:
+            name: All_Images
+            path: All_Images.zip
+      
