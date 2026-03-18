@@ -122,7 +122,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends aria2 unzip binutils python-is-python3 libssl-dev libelf-dev ccache
           echo "正在克隆源码仓库..."
           (
-            aria2c -s16 -x16 -k1M https://github.com/cctv18/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
+            aria2c -s16 -x16 -k1M https://github.com/oneplusoss/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip
             mv "android_kernel_common_oneplus_sm8650-oneplus-${REPO_MANIFEST}" common
             rm -f common.zip
@@ -152,6 +152,15 @@ jobs:
             sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
           done
           
+
+      - name: ⚙️ apply Patch (应用test补丁)
+        run: |
+          echo "正在添加补丁…"
+          cd kernel_workspace/common
+          cp "${GITHUB_WORKSPACE}/.github/workflows/tools/Complete_linked_files.patch ./
+          git apply -p1 < Complete_linked_files.patch || true
+          patch -p1 < Complete_linked_files.patch || true
+
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
           echo "CCACHE_DIR=$HOME/.ccache_${{ env.KSU_TYPE }}_${{ env.DEVICES_NAME }}" >> $GITHUB_ENV
