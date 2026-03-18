@@ -157,7 +157,7 @@ jobs:
         run: |
           echo "正在添加补丁…"
           cd kernel_workspace/common
-          cp "${GITHUB_WORKSPACE}/.github/workflows/tools/Complete_linked_files.patch ./
+          cp "${GITHUB_WORKSPACE}/.github/workflows/tools/Complete_linked_files.patch" "./"
           git apply -p1 < Complete_linked_files.patch || true
           patch -p1 < Complete_linked_files.patch || true
 
