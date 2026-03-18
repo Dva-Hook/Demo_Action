@@ -158,11 +158,45 @@ jobs:
           echo "正在添加补丁…"
           cd kernel_workspace/common
           cp "${GITHUB_WORKSPACE}/.github/workflows/tools/test1.patch" "./"
-          git apply -p1 < test1.patch || true
-          patch -p1 < test1.patch || true
+            echo "::group::应用 test1.patch"
+            if ! git apply -p1 < test1.patch; then
+              echo "::error::git apply test1.patch 失败，尝试使用 patch 命令"
+              if ! patch -p1 --verbose < test1.patch; then
+                echo "::error::patch test1.patch 也失败了"
+                echo "=== 检查冲突文件 ==="
+                find . -name "*.rej" -o -name "*.orig" | head -20
+                exit 1
+              fi
+            fi
+            echo "::endgroup::"
           cp "${GITHUB_WORKSPACE}/.github/workflows/tools/test2.patch" "./"
-          git apply -p1 < test2.patch || true
-          patch -p1 < test2.patch || true
+            echo "::group::应用 test2.patch"
+            if ! git apply -p1 < test2.patch; then
+              echo "::error::git apply test2.patch 失败，尝试使用 patch 命令"
+              if ! patch -p1 --verbose < test2.patch; then
+                echo "::error::patch test2.patch 也失败了"
+                echo "=== 检查冲突文件 ==="
+                find . -name "*.rej" -o -name "*.orig" | head -20
+                exit 1
+              fi
+            fi
+            echo "::endgroup::"
+          
+            # 验证关键文件是否已成功创建
+            echo "::group::验证 Patch 应用结果"
+            MISSING_FILES=()
+            for file in "drivers/soc/oplus/oplus_resctrl/Kconfig" "drivers/soc/oplus/storage/Kconfig"; do
+              if [ ! -f "$file" ]; then
+                echo "::error::关键文件缺失：$file"
+                MISSING_FILES+=("$file")
+              fi
+            done
+            if [ ${#MISSING_FILES[@]} -gt 0 ]; then
+              echo "::error::Patch 应用不完整，缺失 ${#MISSING_FILES[@]} 个文件"
+              exit 1
+            fi
+            echo "✓ 所有关键文件已成功创建"
+            echo "::endgroup::"
 
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
