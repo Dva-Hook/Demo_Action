@@ -157,9 +157,12 @@ jobs:
         run: |
           echo "正在添加补丁…"
           cd kernel_workspace/common
-          cp "${GITHUB_WORKSPACE}/.github/workflows/tools/Complete_linked_files.patch" "./"
-          git apply -p1 < Complete_linked_files.patch || true
-          patch -p1 < Complete_linked_files.patch || true
+          cp "${GITHUB_WORKSPACE}/.github/workflows/tools/test1.patch" "./"
+          git apply -p1 < test1.patch || true
+          patch -p1 < test1.patch || true
+          cp "${GITHUB_WORKSPACE}/.github/workflows/tools/test2.patch" "./"
+          git apply -p1 < test2.patch || true
+          patch -p1 < test2.patch || true
 
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
