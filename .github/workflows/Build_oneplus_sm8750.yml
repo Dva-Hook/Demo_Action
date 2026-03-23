@@ -146,7 +146,10 @@ jobs:
             oneplus_ace5_ultra | realme_GT7)
                 DEFAULT_SUFFIX='-android15-8-g29d86c5fc9dd-abogki428889875-4k'
               ;;
-            oneplus_13 | oneplus_ace5_pro | oneplus_ace_6 | oneplus_13t | realme_GT7pro | realme_GT7pro_Speed | realme_GT8)
+            oneplus_13)
+                DEFAULT_SUFFIX='-android15-8-g7e1f3c083cc6-abogki467167594-4k'
+              ;;
+            oneplus_ace5_pro | oneplus_ace_6 | oneplus_13t | realme_GT7pro | realme_GT7pro_Speed | realme_GT8)
                 DEFAULT_SUFFIX='-android15-8-gf4dc45704e54-abogki446052083-4k'
               ;;
           esac
@@ -164,7 +167,10 @@ jobs:
               oneplus_ace5_ultra | realme_GT7)
                   KERNEL_TIME='Tue Jul  1 19:48:18 UTC 2025'
                 ;;
-              oneplus_13 | oneplus_ace5_pro | oneplus_ace_6 | oneplus_13t | realme_GT7pro | realme_GT7pro_Speed | realme_GT8)
+              oneplus_ace5_ultra | realme_GT7)
+                  KERNEL_TIME='Mon Dec  8 04:00:43 UTC 2025'
+                ;;
+              oneplus_ace5_pro | oneplus_ace_6 | oneplus_13t | realme_GT7pro | realme_GT7pro_Speed | realme_GT8)
                   KERNEL_TIME='Fri Sep 19 06:13:40 UTC 2025'
                 ;;
             esac
