@@ -327,8 +327,7 @@ jobs:
         run: |
           cd kernel_workspace/common
           echo "正在启用BBG基带守护…"
-          echo "CONFIG_BBG=y" >> ./common/arch/arm64/configs/gki_defconfig
-          cd ./common
+          echo "CONFIG_BBG=y" >> ./arch/arm64/configs/gki_defconfig
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
 
