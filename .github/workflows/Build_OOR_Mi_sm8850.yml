@@ -72,14 +72,14 @@ jobs:
         run: |
           if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
-             oneplus_15)
-                DEFAULT_SUFFIX='-android15-8-g5a0ffb447c1d-ab13771415-4k'
+             "oneplus_15")
+                DEFAULT_SUFFIX='-android16-5-g188c695beb6d-ab14367805-4k'
               ;;
-            oneplus_ace_6t)
-                DEFAULT_SUFFIX='-android15-8-g29d86c5fc9dd-abogki428889875-4k'
+            "oneplus_ace_6t")
+                DEFAULT_SUFFIX='-android16-5-g844001fb8721-ab14552068-4k'
               ;;
-            xiaomi_17系列)
-                DEFAULT_SUFFIX='-android15-8-gf4dc45704e54-abogki446052083-4k'
+            "xiaomi_17系列")
+                DEFAULT_SUFFIX='-android16-5-g75e9b1c7ae7c-abogki463945075-4k'
               ;;
           esac
             echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
@@ -90,14 +90,14 @@ jobs:
           fi
           if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
-              oneplus_pad_2_pro)
-                  KERNEL_TIME='Fri Jul 11 22:46:09 UTC 2025'
+              "oneplus_15")
+                  KERNEL_TIME='Fri Oct 31 14:58:19 UTC 2025'
                 ;;
-              oneplus_ace5_ultra | realme_GT7)
-                  KERNEL_TIME='Tue Jul  1 19:48:18 UTC 2025'
+              "oneplus_ace_6t")
+                  KERNEL_TIME='Fri Dec  5 02:15:49 UTC 2025'
                 ;;
-              oneplus_13 | oneplus_ace5_pro | oneplus_ace_6 | oneplus_13t | realme_GT7pro | realme_GT7pro_Speed | realme_GT8)
-                  KERNEL_TIME='Fri Sep 19 06:13:40 UTC 2025'
+              "xiaomi_17系列")
+                  KERNEL_TIME='Thu Nov 27 08:45:40 UTC 2025'
                 ;;
             esac
             echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
@@ -113,40 +113,48 @@ jobs:
           mkdir kernel_workspace
           cd kernel_workspace
           
-          sudo apt-mark hold firefox &&
-          sudo apt-mark hold libc-bin &&
-          sudo apt purge man-db &&
-          sudo rm -rf /var/lib/man-db/auto-update &&
-          sudo apt update &&
+          sudo apt-mark hold firefox
+          sudo apt-mark hold libc-bin
+          sudo apt purge man-db
+          sudo rm -rf /var/lib/man-db/auto-update
+          sudo apt update
           sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
           echo "正在克隆源码仓库..."
-          if [ "${DEVICES_NAME}" = "realme_GT7pro" ] || [ "${DEVICES_NAME}" = "realme_GT7pro_Speed" ] || [ "${DEVICES_NAME}" = "realme_GT8" ]; then
-            aria2c -s16 -x16 -k1M https://github.com/realme-kernel-opensource/realme_GT8-AndroidB-common-source/archive/refs/heads/master.zip -o common.zip
-            unzip -q common.zip && 
-            mv "realme_GT8-AndroidB-common-source-master" common
-          elif [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICES_NAME}" = "realme_GT7" ]; then
-            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6991/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
-            unzip -q common.zip && 
-            mv "android_kernel_oneplus_mt6991-oneplus-${REPO_MANIFEST}" common
-          else
-            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
-            unzip -q common.zip && 
-            mv "android_kernel_common_oneplus_sm8750-oneplus-${REPO_MANIFEST}" common
+          if [ "${DEVICES_NAME}" = "oneplus_15" ]; then
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8850/archive/refs/heads/oneplus/sm8850_b_16.0.0_oneplus_15.zip -o common.zip
+            unzip -q common.zip 
+            mv "android_kernel_common_oneplus_sm8850-oneplus-sm8850_b_16.0.0_oneplus_15" common
+            rm -rf common.zip 
           fi
-          rm -rf common.zip 
-          echo "正在克隆llvm-clang18工具链..."
-          mkdir -p clang18 &&
-          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip -o clang.zip &&
-          unzip -q clang.zip -d clang18 &&
-          rm -rf clang.zip &
-          echo "正在克隆构建工具..." &&
-          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip -o build-tools.zip &&
-          unzip -q build-tools.zip &&
-          rm -rf build-tools.zip &
+          if [ "${DEVICES_NAME}" = "oneplus_ace_6t" ]; then
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_sm8845/archive/refs/heads/oneplus/sm8845_b_16.0.0_ace_6t.zip -o common.zip
+            unzip -q common.zip 
+            mv "android_kernel_oneplus_sm8845-oneplus-sm8845_b_16.0.0_ace_6t" common
+            rm -rf common.zip 
+          fi
+          if [ "${DEVICES_NAME}" = "xiaomi_17系列" ]; then
+            aria2c -s16 -x16 -k1M https://github.com/showdo/Build_Lenovo_sm8750/releases/download/common-6.12/2025-06.tar.gz -o common.tar.gz
+            mkdir -p common
+            tar -xzf common.tar.gz -C common
+            rm -f common.tar.gz
+          fi
+           echo "正在克隆llvm-clang19工具链..."
+          mkdir -p clang19
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang19-r536225/clang-r536225.zip -o clang.zip
+          unzip -q clang.zip -d clang19
+          rm -rf clang.zip 
+          echo "正在克隆Rust 1.82.0工具链..."
+          mkdir -p rust
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang19-r536225/rust.zip -o rust.zip
+          unzip -q rust.zip -d rust
+          rm -rf rust.zip
+          echo "正在克隆构建工具..."
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang19-r536225/build-tools.zip -o build-tools.zip
+          unzip -q build-tools.zip
+          rm -rf build-tools.zip
           wait
-          echo "所有源码及llvm-Clang18工具链初始化完成！"
-          echo "正在去除 ABI 保护 & 去除 dirty 后缀..."
-          rm common/android/abi_gki_protected_exports_* || true
+          echo "所有源码及llvm-clang19工具链初始化完成！"
+          echo "正在去除 dirty 后缀..."
           for f in common/scripts/setlocalversion; do
             sed -i 's/ -dirty//g' "$f"
             sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
@@ -302,23 +310,6 @@ jobs:
             echo "未命中仓库缓存，也未找到公共缓存，将从空缓存开始构建"
           fi
       
-      - name: 🛠 Set SerialID Check (添加SerialID校验)
-        if: ${{ env.ENABLE_SERIALID_CHECK == 'true' }}
-        working-directory: kernel_workspace/common
-        run: |
-          if grep -q 'SOC_SN_CHECK' init/main.c; then
-            echo "main.c 已包含, 跳过"
-            exit 0
-          else
-            cp "${GITHUB_WORKSPACE}/.github/workflows/tools/serialid_check.c" ./
-            LINE=$(grep -n '^#include' init/main.c | tail -n 1 | cut -d: -f1)
-            head -n "$LINE" init/main.c > init/main.c.patched
-            cat serialid_check.c >> init/main.c.patched
-            tail -n +$((LINE+1)) init/main.c >> init/main.c.patched
-            mv init/main.c.patched init/main.c
-            echo "已自动插入 serialid_check.c 到 main.c"
-          fi
-
       - name: 🔧 apply lz4 1.10.0 & zstd 1.5.7 patches (添加lz4 1.10.0 & zstd 1.5.7补丁)
         run: |
           echo "正在添加lz4 1.10.0 & zstd 1.5.7补丁…"
@@ -387,13 +378,13 @@ jobs:
       - name: 🔧 Set up SUSFS (配置 SUSFS)
         run: |
           cd kernel_workspace
-          git clone --depth=1 https://github.com/cctv18/susfs4oki.git susfs4ksu -b oki-android15-6.6
-          wget https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8750/main/other_patch/69_hide_stuff.patch -O ./common/69_hide_stuff.patch
-          cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch ./common/
+          git clone --depth=1 https://github.com/cctv18/susfs4oki.git susfs4ksu -b oki-android15-6.12
+          wget https://raw.githubusercontent.com/cctv18/oppo_oplus_realme_sm8850/main/other_patch/69_hide_stuff.patch -O ./common/69_hide_stuff.patch
+          cp ./susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.12.patch ./common/
           cp ./susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ./susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
           cd ./common
-          patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
+          patch -p1 < 50_add_susfs_in_gki-android15-6.12.patch || true
           patch -p1 -N -F 3 < 69_hide_stuff.patch || true
           echo "[OK] SUSFS 补丁处理流程全部完成"
 
@@ -473,38 +464,6 @@ jobs:
           sudo sed -i "s/-4k/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           
-      - name: 🔧 Apply Sched Patch (应用完美风驰补丁)
-        run: |
-          if [ "${{ env.ENABLE_SCX }}" = "true" ]; then
-            if [ "$SCHED_FILE" = "none" ]; then
-              echo "该机型自带风驰，跳过应用补丁"
-            else
-              cd kernel_workspace/common
-              if [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICES_NAME}" = "realme_GT7" ]; then
-                git clone https://github.com/Numbersf/SCHED_PATCH.git -b "mt6991"
-              else
-                git clone https://github.com/Numbersf/SCHED_PATCH.git -b "sm8750"
-              fi
-              echo "正在拉取风驰补丁"
-              cp ./SCHED_PATCH/fengchi_${{env.SCHED_FILE}}.patch ./
-              if [[ -f "fengchi_${{env.SCHED_FILE}}.patch" ]]; then
-                echo "开始应用风驰补丁"
-                dos2unix "fengchi_${{env.SCHED_FILE}}.patch"
-                patch -p1 -F 3 < "fengchi_${{env.SCHED_FILE}}.patch"
-                echo "完美风驰补丁应用完成"
-              else
-                echo "❌ 未匹配到补丁，风驰补丁暂未支持该机型"
-                exit 11
-              fi
-            fi
-          else
-            echo "未启用风驰，则需应用OGKI转换GKI补丁"
-              sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
-               cp "${GITHUB_WORKSPACE}/.github/workflows/Bin/hmbird_patch.patch" ./hmbird_patch.patch
-              echo "正在打OGKI转换GKI补丁"
-              patch -p1 -F 3 < hmbird_patch.patch
-              echo "OGKI转换GKI_patch完成"
-          fi
       - name: 📥 Start build timer (构建计时开始)
         run: 
           echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
@@ -514,23 +473,33 @@ jobs:
         run: |
           WORKDIR="$(pwd)"
           export PATH="/usr/lib/ccache:$PATH"
-          export PATH="$WORKDIR/kernel_workspace/clang18/bin:$PATH"
+          export PATH="$WORKDIR/kernel_workspace/clang19/bin:$PATH"
           export PATH="$WORKDIR/kernel_workspace/build-tools/bin:$PATH"
-          CLANG_DIR="$WORKDIR/kernel_workspace/clang18/bin"
+          export PATH="$WORKDIR/kernel_workspace/rust/bin:$PATH"
+          export CLANG_DIR="$WORKDIR/kernel_workspace/clang19/bin"
           CLANG_VERSION="$($CLANG_DIR/clang --version | head -n 1)"
           LLD_VERSION="$($CLANG_DIR/ld.lld --version | head -n 1)"
+          RUSTC_VERSION="$(rustc -V 2>/dev/null | head -n1)"
+          BINDGEN_VERSION="$(bindgen --version 2>/dev/null | head -n1)"
+          echo "编译器信息:"
+          echo "Clang版本: $CLANG_VERSION"
+          echo "LLD版本: $LLD_VERSION"
+          echo "Rustc版本: $RUSTC_VERSION"
+          echo "Bindgen版本: $BINDGEN_VERSION"
           pahole_version=$(pahole --version 2>/dev/null | head -n1); [ -z "$pahole_version" ] && echo "pahole版本：未安装" || echo "pahole版本：$pahole_version"
+          
           export CCACHE_LOGFILE="${{ github.workspace }}/kernel_workspace/ccache.log"
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_BASEDIR="${{ github.workspace }}"
           export CCACHE_NOHASHDIR="true"
-          export CCACHE_HARDLINK="true"
+          export CCACHE_NOHARDLINK="true"
           export CCACHE_DIR="${{ env.CCACHE_DIR }}"
           export CCACHE_MAXSIZE="3G"
           echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$CCACHE_DIR/ccache.conf"
+          
           cd kernel_workspace/common
-          wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfakestat.so
-          wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfaketimeMT.so
+          wget https://github.com/cctv18/raw/refs/heads/oppo_oplus_realme_sm8850/lib/libfakestat.so
+          wget https://github.com/cctv18/raw/refs/heads/oppo_oplus_realme_sm8850/lib/libfaketimeMT.so
           chmod 777 ./*.so
           export FAKESTAT="2025-05-25 12:00:00"
           export FAKETIME="@2025-05-25 13:00:00"
@@ -538,37 +507,83 @@ jobs:
           echo "FAKETIME=$FAKETIME" >> $GITHUB_ENV
           SO_DIR=$(pwd)
           export PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"
+          export REAL_CLANG_PATH="$WORKDIR/kernel_workspace/clang19/bin/clang"
+          #创建 CC (编译器) 包装器
           echo '#!/bin/bash' > cc-wrapper
           echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> cc-wrapper
           echo 'export FAKESTAT="'$FAKESTAT'"' >> cc-wrapper
           echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
-          echo 'ccache clang "$@"' >> cc-wrapper
+          echo 'ccache $REAL_CLANG_PATH "$@"' >> cc-wrapper
+          #创建 LD (链接器) 包装器
           echo '#!/bin/bash' > ld-wrapper
           echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> ld-wrapper
           echo 'export FAKESTAT="'$FAKESTAT'"' >> ld-wrapper
           echo 'export FAKETIME="'$FAKETIME'"' >> ld-wrapper
           echo 'ld.lld "$@"' >> ld-wrapper
+          
+          # 测试时间劫持测试是否正常工作
+          echo "--- [Wrapper Test] 正在创建通用的时间劫持测试脚本 ---"
           echo '#!/bin/bash' > test-wrapper.sh
           echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> test-wrapper.sh
           echo 'export FAKESTAT="'$FAKESTAT'"' >> test-wrapper.sh
           echo 'export FAKETIME="'$FAKETIME'"' >> test-wrapper.sh
           echo 'echo ">>> Wrapper 内部环境检查完毕."' >> test-wrapper.sh
-          echo 'exec "$@"' >> test-wrapper.sh
+          echo 'exec "$@"' >> test-wrapper.sh # 执行所有传入的参数
           chmod +x test-wrapper.sh
+          echo "--- [Wrapper Test] 正在测试 (date) 命令 ---"
           ./test-wrapper.sh date
+          echo "--- [Wrapper Test] 正在测试 (stat) 命令 ---"
           ./test-wrapper.sh stat ./Makefile
+          echo "--- [Wrapper Test] 测试完毕 ---"
           chmod +x cc-wrapper ld-wrapper
+          echo "--- 编译前环境时间: $(LD_PRELOAD=$PRELOAD_LIBS date) ---"
+          echo "--- 编译前环境文件时间戳: ---"
           LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
-          export KBUILD_BUILD_TIMESTAMP="${KERNEL_TIME}"
+          
+          # 6.12内核make编译核心配置：
+          # 1. 重映射物理路径 (由于6.12内核引入了Rust代码，计算内核符号版本的工具变成了gendwarfksyms，而gendwarfksyms无法正确预处理绝对路径，故我们需要手动把绝对路径重映射为相对路径，否则内核符号校验值会大面积出错)
+          COMMON_REAL_PATH=$(pwd -P)
+          ROOT_REAL_PATH=$(dirname "$COMMON_REAL_PATH")
+          KCFLAGS+=" -fdebug-prefix-map=$ROOT_REAL_PATH=."
+          KCFLAGS+=" -fmacro-prefix-map=$ROOT_REAL_PATH=."
+          KCFLAGS+=" -ffile-prefix-map=$ROOT_REAL_PATH=."
+          # 2. 声明Rust等工具（此处若不进行声明，内核编译前的Rust环境预检测脚本scripts/rust_is_available.sh会检测失败，导致内核无法正常开启Rust代码编译）
+          export RUSTC="rustc"
+          export BINDGEN="bindgen"
+          export CC="clang"
+          export LIBCLANG_PATH="$WORKDIR/kernel_workspace/clang19/lib"
+          # 3. 配置KCFLAGS
+          KCFLAGS+=" -no-canonical-prefixes"
+          KCFLAGS+=" -O2"
+          KCFLAGS+=" -pipe"
+          KCFLAGS+=" -Wno-error"
+          KCFLAGS+=" -fno-stack-protector"
+          KCFLAGS+=" -D__ANDROID_COMMON_KERNEL__"
+          export KCFLAGS
+          # 4. 配置其他工具及选项（非必须，防错冗余）
+          export HOSTCC=clang
+          export LD="ld.lld"
+          export HOSTLD=ld.lld
+          export LLVM=1 LLVM_IAS=1
+          export ARCH=arm64 SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm AS=clang READELF=llvm-readelf
+          export OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump OBJSIZE=llvm-size STRIP=llvm-strip
+          # 5. 编译前运行官方环境配置脚本
+          source "./_setup_env.sh" 2>/dev/null || true
+          
+          #在构建内核的同时清除不必要的.NET, Android NDK, Haskell, CodeQL运行库，清理空间且不阻塞后续步骤运行
           sudo rm -rf /usr/share/dotnet &
           sudo rm -rf /usr/local/lib/android &
           sudo rm -rf /opt/ghc &
           sudo rm -rf /opt/hostedtoolcache/CodeQL &
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" LD="ld.lld" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error gki_defconfig &&
-          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error Image
-          LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="clang" LD="ld.lld" OBJCOPY="llvm-objcopy" O=out gki_defconfig &&
+          export CC="$(pwd)/cc-wrapper" && export LD="$(pwd)/ld-wrapper" &&
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" OBJCOPY="llvm-objcopy" O=out Image
           echo "ccache状态："
           ccache -s
+          echo "编译后空间:"
+          df -h
       
       - name: 🕒 Calculate build time (计算构建时间)
         run: |
