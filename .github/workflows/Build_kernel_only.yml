@@ -198,7 +198,7 @@ jobs:
 
       - name: 📥 Restore ccache (载入当前机型的ccache缓存)
         id: ccache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache_ReSukiSU_-${{ env.DEVICES_NAME }}-latest
@@ -515,7 +515,7 @@ jobs:
           rm -rf ./main.bin
           
       - name: 📤 Upload AnyKernel3 (上传 Anykernel3)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
          name: AK3_${{ env.DEVICES_NAME }}
          path: ./AnyKernel3/*

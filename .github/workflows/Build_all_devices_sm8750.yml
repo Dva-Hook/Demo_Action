@@ -229,7 +229,7 @@ jobs:
 
       - name: 📥 Restore ccache (载入当前机型的 ccache 缓存)
         id: ccache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-latest
@@ -702,7 +702,7 @@ jobs:
           cp ./Image "./${IMAGENAME}"
 
       - name: 📤 Upload Image (上传 Image)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
          name: Image_${{ matrix.device_name }}_${{ env.KSUVER }}
          path: kernel_workspace/common/out/arch/arm64/boot/${{ env.IMAGENAME }}
@@ -717,7 +717,7 @@ jobs:
           rm -rf ./AnyKernel3/Image
           
       - name: 📤 Upload AnyKernel3 (上传 AnyKernel3)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
          name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}_SuKiSU
          path: ./AnyKernel3/*
@@ -728,7 +728,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Download all artifacts (下载所有构建产物)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: ./all_artifacts
           merge-multiple: false
@@ -740,7 +740,7 @@ jobs:
           echo "========================"
       
       - name: 📤 Upload combined artifacts (上传合并后的总包)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: All_Devices_Build_Artifacts_${{ github.run_id }}
           path: ./all_artifacts
