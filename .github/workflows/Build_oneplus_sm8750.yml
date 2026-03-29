@@ -42,26 +42,32 @@ on:
         default: ''
 
       enable_ReKernel:
-        description: "是否启用Re-Kernel支持"
-        required: false
+        description: "启用Re-Kernel支持"
+        required: true
         default: false
+        type: boolean
+
+      enable_Adios:
+        description: "启用ADIOS IO调度器支持"
+        required: true
+        default: true
         type: boolean
       
       enable_scx:
         description: "添加完美风驰"
-        required: false
+        required: true
         default: true
         type: boolean
 
       enable_bbg:
         description: "开启BBG基带守护"
-        required: false
+        required: true
         default: true
         type: boolean
       
       enable_serialid_check:
         description: "开启SerialID校验"
-        required: false
+        required: true
         default: true
         type: boolean
 
@@ -79,6 +85,7 @@ jobs:
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
       ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
+      ENABLE_ADIOS:           ${{ github.event.inputs.enable_Adios }}
       ENABLE_SCX:             ${{ github.event.inputs.enable_scx }}
       ENABLE_BBG:             ${{ github.event.inputs.enable_bbg }}
       ENABLE_SERIALID_CHECK:  ${{ github.event.inputs.enable_serialid_check }}
@@ -495,6 +502,7 @@ jobs:
           echo "✓ LZ4 ARM64 硬件加速支持配置完成"
 
       - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler)
+        if: ${{ env.ENABLE_ADIOS == 'true' }}
         working-directory: kernel_workspace/common
         run: |
           echo "开始添加 ADIOS I/O 调度器支持..."
