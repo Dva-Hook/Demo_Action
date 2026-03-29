@@ -13,7 +13,7 @@ on:
           - 'ReSukiSU'
           - 'SukiSU-Ultra'
         default: 'ReSukiSU'
-      
+
       custom_kernel_suffix:
         description: "✏️ 自定义内核名称 - 仅在取消勾选'保持原设置'时有效 (不懂请保持默认)"
         required: false
@@ -81,7 +81,6 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       KSU_TYPE:               ${{ github.event.inputs.ksu_type }}
-      DEVICES_NAME:           ${{ github.event.inputs.device_name }}
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
       ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
@@ -394,7 +393,7 @@ jobs:
             mv init/main.c.patched init/main.c
             echo "已自动插入 serialid_check.c 到 main.c"
           fi
-
+      
       - name: 🔧 Add Re-Kernel Support (添加 Re-Kernel 支持)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         working-directory: kernel_workspace/common
