@@ -81,6 +81,7 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       KSU_TYPE:               ${{ github.event.inputs.ksu_type }}
+      DEVICES_NAME:           ${{ matrix.device_name }}
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
       ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
