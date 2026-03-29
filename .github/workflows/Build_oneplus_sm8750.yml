@@ -31,22 +31,22 @@ on:
           - 'realme_GT8'
         default: 'oneplus_ace5_pro'
 
-      keep_original_settings:
-        description: "📝保持原内核名称及构建时间(不懂请保持默认)"
-        required: false
-        default: true
-        type: boolean
-
       custom_kernel_suffix:
-        description: "✏️ 自定义内核名称- 仅在取消勾选'保持原设置'时有效(不懂请保持默认)"
+        description: "✏️ 自定义内核名称- (-开头 留空则默认官方）"
         required: false
         default: ''
       
       custom_kernel_time:
-        description: "⏰ 自定义构建时间- 仅在取消勾选'保持原设置'时有效(不懂请保持默认)"
+        description: "⏰ 自定义构建时间- (英文时间字符串格式 留空则默认官方）"
         required: false
         default: ''
 
+      enable_ReKernel:
+        description: "是否启用Re-Kernel支持"
+        required: false
+        default: false
+        type: boolean
+      
       enable_scx:
         description: "添加完美风驰"
         required: false
@@ -76,9 +76,9 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       KSU_TYPE:               ${{ github.event.inputs.ksu_type }}
       DEVICES_NAME:           ${{ github.event.inputs.device_name }}
-      KEEP_ORIGINAL_SETTINGS: ${{ github.event.inputs.keep_original_settings }}
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
+      ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
       ENABLE_SCX:             ${{ github.event.inputs.enable_scx }}
       ENABLE_BBG:             ${{ github.event.inputs.enable_bbg }}
       ENABLE_SERIALID_CHECK:  ${{ github.event.inputs.enable_serialid_check }}
@@ -136,7 +136,7 @@ jobs:
               echo "IMAGENAME=Image_Rm_GT_8" >> $GITHUB_ENV
               echo "SCHED_FILE=oneplus_ace_6" >> $GITHUB_ENV
           esac
-          if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
+          if [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
              oneplus_pad_2_pro)
                 DEFAULT_SUFFIX='-android15-8-g096cdb6ecefc-ab14358676-4k'
@@ -154,10 +154,15 @@ jobs:
             echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
             echo "使用原官核名称：$DEFAULT_SUFFIX"
           else
+              # 验证用户输入是否以 - 开头
+              if [[ "${{ github.event.inputs.custom_kernel_suffix }}" != -* ]]; then
+                echo "::warning::自定义内核名称请以 - 开头"
+                echo "示例：-android15-8-g096cdb6ecefc-ab14358676-4k"
+              fi
             echo "使用自定义名称: ${{ github.event.inputs.custom_kernel_suffix }}"
             echo "DEFAULT_SUFFIX=${{ github.event.inputs.custom_kernel_suffix }}" >> $GITHUB_ENV
           fi
-          if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
+          if [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
               oneplus_pad_2_pro)
                   KERNEL_TIME='Tue Oct 28 09:04:21 UTC 2025'
@@ -224,6 +229,39 @@ jobs:
             sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
           done
           
+      - name: 🔧 Add Re-Kernel Support (添加 Re-Kernel 支持)
+        if: ${{ env.ENABLE_REKERNEL == 'true' }}
+        working-directory: kernel_workspace/common
+        run: |
+          echo "开始添加 Re-Kernel 支持..."
+        
+          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/Re-Kernel_Support.patch"
+        
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "::error::未找到 Re-Kernel 补丁文件：$PATCH_FILE"
+            exit 1
+          fi
+        
+          # 检查是否已经应用过补丁
+          if grep -q "Re-Kernel" init/main.c 2>/dev/null || \
+              grep -q "re_kernel" init/main.c 2>/dev/null; then
+            echo "✓ Re-Kernel 支持已存在，跳过应用补丁"
+            exit 0
+          fi
+        
+          # 复制补丁文件到工作目录
+          cp "$PATCH_FILE" ./Re-Kernel_Support.patch
+        
+          # 应用补丁
+          if patch -p1 -N -F 3 < Re-Kernel_Support.patch; then
+            echo "✓ Re-Kernel 补丁应用成功"
+          else
+            echo "::warning::Re-Kernel 补丁应用失败，可能已部分应用或存在冲突"
+            exit 1
+          fi
+        
+          rm -f Re-Kernel_Support.patch
+
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
           echo "CCACHE_DIR=$HOME/.ccache_${{ env.KSU_TYPE }}_${{ env.DEVICES_NAME }}" >> $GITHUB_ENV
