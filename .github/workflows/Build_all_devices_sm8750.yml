@@ -15,12 +15,12 @@ on:
         default: 'ReSukiSU'
 
       custom_kernel_suffix:
-        description: "✏️ 自定义内核名称 - 仅在取消勾选'保持原设置'时有效 (不懂请保持默认)"
+        description: "✏️ 自定义内核名称- (-开头 留空则默认官方）"
         required: false
         default: ''
       
       custom_kernel_time:
-        description: "⏰ 自定义构建时间 - 仅在取消勾选'保持原设置'时有效 (不懂请保持默认)"
+        description: "⏰ 自定义构建时间- (英文时间字符串格式 留空则默认官方）"
         required: false
         default: ''
 
@@ -146,7 +146,7 @@ jobs:
               echo "IMAGENAME=Image_Rm_GT_8" >> $GITHUB_ENV
               echo "SCHED_FILE=oneplus_ace_6" >> $GITHUB_ENV
           esac
-          if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
+          if [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
              oneplus_pad_2_pro)
                 DEFAULT_SUFFIX='-android15-8-g096cdb6ecefc-ab14358676-4k'
@@ -164,10 +164,15 @@ jobs:
             echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
             echo "使用原官核名称：$DEFAULT_SUFFIX"
           else
+              # 验证用户输入是否以 - 开头
+              if [[ "${{ github.event.inputs.custom_kernel_suffix }}" != -* ]]; then
+                echo "::warning::自定义内核名称请以 - 开头"
+                echo "示例：-android15-8-g096cdb6ecefc-ab14358676-4k"
+              fi
             echo "使用自定义名称: ${{ github.event.inputs.custom_kernel_suffix }}"
             echo "DEFAULT_SUFFIX=${{ github.event.inputs.custom_kernel_suffix }}" >> $GITHUB_ENV
           fi
-          if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
+          if [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
               oneplus_pad_2_pro)
                   KERNEL_TIME='Tue Oct 28 09:04:21 UTC 2025'
@@ -188,6 +193,7 @@ jobs:
             echo "使用自定义构建时间: ${{ github.event.inputs.custom_kernel_time }}"
             echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
           fi
+
 
       - name: 🛠 Install dependencies and Initialize repo and sync（安装环境依赖 + 初始化源码仓库及工具链）
         run: |
