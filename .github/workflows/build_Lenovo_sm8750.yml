@@ -1,4 +1,7 @@
 name: Build_Lenovo_sm8750
+permissions:
+  contents: read
+  actions: write
 on:
   workflow_dispatch:
     inputs:
@@ -466,6 +469,7 @@ jobs:
           fi
           if ! grep -q "CONFIG_MQ_IOSCHED_ADIOS" arch/arm64/configs/gki_defconfig; then
             echo "CONFIG_MQ_IOSCHED_ADIOS=y" >> arch/arm64/configs/gki_defconfig
+            echo "CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=y" >> arch/arm64/configs/gki_defconfig
             echo "✓ 已启用 ADIOS I/O 调度器支持"
           fi
           echo "✓ ADIOS I/O 调度器支持配置完成"
