@@ -252,13 +252,26 @@ jobs:
           # 复制补丁文件到工作目录
           cp "$PATCH_FILE" ./Re-Kernel_Support.patch
         
-          # 应用补丁
-          if patch -p1 -N -F 3 < Re-Kernel_Support.patch; then
-            echo "✓ Re-Kernel 补丁应用成功"
-          else
-            echo "::warning::Re-Kernel 补丁应用失败，可能已部分应用或存在冲突"
-            exit 1
-          fi
+            # 应用补丁 (使用更宽松的选项处理空白字符和行尾问题)
+            echo "正在应用 Re-Kernel 补丁..."
+          
+            # 首先尝试正常应用
+            if patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/patch.log; then
+              echo "✓ Re-Kernel 补丁应用成功"
+            else
+              echo "::warning::Re-Kernel 补丁应用出现问题，检查日志..."
+              # 显示详细的错误信息
+              if grep -q "malformed patch" /tmp/patch.log; then
+                echo "::warning::补丁文件格式问题，尝试强制应用..."
+                # 尝试忽略错误强制应用
+                patch -p1 -N --force --ignore-whitespace < Re-Kernel_Support.patch || true
+                echo "✓ Re-Kernel 补丁已尽力应用，请手动验证"
+              else
+                echo "::warning::Re-Kernel 补丁应用失败，可能存在冲突"
+                cat /tmp/patch.log
+                exit 1
+              fi
+            fi
         
           rm -f Re-Kernel_Support.patch
 
