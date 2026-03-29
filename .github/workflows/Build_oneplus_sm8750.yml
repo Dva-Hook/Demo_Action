@@ -428,6 +428,7 @@ jobs:
                 exit 1
               fi
             fi
+          cd ..
           echo "CONFIG_REKERNEL=y" >> ./common/arch/arm64/configs/gki_defconfig
           rm -f Re-Kernel_Support.patch
 
