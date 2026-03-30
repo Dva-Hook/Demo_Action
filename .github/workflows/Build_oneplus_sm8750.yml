@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       ksu_type:
-        description: "📝请选择要集成的KSU："
+        description: "📝请选择要集成的KSU"
         required: true
         type: choice
         options:
@@ -15,7 +15,7 @@ on:
         default: 'ReSukiSU'
         
       device_name:
-        description: "📝请选择要编译的机型："
+        description: "📝请选择要编译的机型"
         required: true
         type: choice
         options:

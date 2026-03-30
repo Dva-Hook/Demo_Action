@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       ksu_type:
-        description: "📝请选择要集成的 KSU："
+        description: "📝请选择要集成的 KSU"
         required: true
         type: choice
         options:
@@ -25,13 +25,13 @@ on:
         default: ''
 
       enable_ReKernel:
-        description: "启用Re-Kernel支持"
+        description: "添加 Re-Kernel 支持"
         required: true
         default: false
         type: boolean
 
       enable_Adios:
-        description: "启用ADIOS IO调度器支持"
+        description: "添加 ADIOS IO调度器支持"
         required: true
         default: true
         type: boolean
@@ -43,19 +43,19 @@ on:
         type: boolean
 
       enable_bbg:
-        description: "开启BBG基带守护"
+        description: "添加BBG基带守护"
         required: true
         default: true
         type: boolean
       
       enable_serialid_check:
-        description: "开启SerialID校验"
+        description: "添加SerialID校验"
         required: true
         default: true
         type: boolean
 
       enable_susfs:
-        description: "启用SUSFS"
+        description: "启用SUSFS挂载"
         required: true
         default: true
         type: boolean
