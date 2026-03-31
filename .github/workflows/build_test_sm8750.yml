@@ -1,4 +1,4 @@
-name: Build_oneplus_sm8750
+name: Build_test_sm8750
 permissions:
   contents: read
   actions: write
