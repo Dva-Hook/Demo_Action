@@ -100,17 +100,6 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      
-      - name: ♻️ Cache apt packages (缓存 apt 安装包)
-        uses: actions/cache@v5
-        with:
-          path: |
-            /var/cache/apt
-            /var/lib/apt/lists
-          key: apt-cache-${{ runner.os }}-${{ hashFiles('.github/workflows/Build_oneplus_sm8750.yml') }}
-          restore-keys: |
-            apt-cache-${{ runner.os }}-
-          
       - name: ⚙️ Set REPO_MANIFEST (设置对应机型配置文件)
         run: |
           case "${{ env.DEVICES_NAME }}" in
@@ -214,28 +203,13 @@ jobs:
           rm -rf kernel_workspace
           mkdir kernel_workspace
           cd kernel_workspace
-          # 优化：快速安装必要依赖（GitHub Actions 每次都是全新 VM）
-          # 锁定易更新的包，防止意外更新导致时间浪费
-          sudo apt-mark hold firefox libc-bin || true &&
-          sudo apt purge -y man-db &&
+          
+          sudo apt-mark hold firefox &&
+          sudo apt-mark hold libc-bin &&
+          sudo apt purge man-db &&
           sudo rm -rf /var/lib/man-db/auto-update &&
-          # 如果缓存命中则跳过 update，否则执行更新
-          if [ -z "$(ls -A /var/cache/apt/archives)" ]; then
-            echo "🔄 Apt cache miss, updating..."
-            sudo apt update -qq
-          else
-            echo "✅ Using cached apt packages"
-          fi &&
-          sudo apt-get install -y --no-install-recommends \
-            binutils \
-            python-is-python3 \
-            libssl-dev \
-            libelf-dev \
-            dos2unix \
-            ccache \
-            p7zip-full \
-            zstd \
-            aria2
+          sudo apt update &&
+          sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
           echo "正在克隆源码仓库..."
           if [ "${DEVICES_NAME}" = "realme_GT7pro" ] || [ "${DEVICES_NAME}" = "realme_GT7pro_Speed" ] || [ "${DEVICES_NAME}" = "realme_GT8" ]; then
             aria2c -s16 -x16 -k1M https://github.com/realme-kernel-opensource/realme_GT8-AndroidB-common-source/archive/refs/heads/master.zip -o common.zip
@@ -251,13 +225,12 @@ jobs:
             mv "android_kernel_common_oneplus_sm8750-oneplus-${REPO_MANIFEST}" common
           fi
           rm -rf common.zip 
-          
           echo "正在克隆llvm-clang18工具链..."
           mkdir -p clang18 &&
           aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip -o clang.zip &&
           unzip -q clang.zip -d clang18 &&
           rm -rf clang.zip &
-            echo "正在克隆构建工具..."
+          echo "正在克隆构建工具..." &&
           aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip -o build-tools.zip &&
           unzip -q build-tools.zip &&
           rm -rf build-tools.zip &
