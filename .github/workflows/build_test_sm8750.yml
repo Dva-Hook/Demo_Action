@@ -68,6 +68,7 @@ jobs:
           echo "正在克隆源码仓库..."
           aria2c -s16 -x16 -k1M https://github.com/brokestar233/android_kernel_common_oneplus_sm8750/archive/refs/heads/6.6-final.zip -o common.zip
           unzip -q common.zip && 
+          ls
           mv "android_kernel_common_oneplus_sm8750-oneplus-6.6-final" common
           rm -rf common.zip 
           echo "正在克隆llvm-clang18工具链..."
