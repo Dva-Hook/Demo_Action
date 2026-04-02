@@ -53,7 +53,7 @@ jobs:
           echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
           echo "使用官核时间：$KERNEL_TIME"
 
-      - name: 🛠 Install dependencies and Initialize repo and sync （安装环境依赖+初始化源码仓库及工具链）
+            - name: 🛠 Install dependencies and Initialize repo and sync （安装环境依赖 + 初始化源码仓库及工具链）
         run: |
           rm -rf kernel_workspace
           mkdir kernel_workspace
@@ -70,18 +70,25 @@ jobs:
           unzip -q common.zip && 
           mv "android_kernel_common_oneplus_sm8750-6.6-final" common
           rm -rf common.zip 
-          echo "正在克隆llvm-clang18工具链..."
-          mkdir -p clang18 &&
-          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip -o clang.zip &&
-          unzip -q clang.zip -d clang18 &&
+          echo "正在克隆llvm-clang19 工具链..."
+          mkdir -p clang19 &&
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang19-r536225/clang-r536225.zip -o clang.zip &&
+          unzip -q clang.zip -d clang19 &&
           rm -rf clang.zip &
           echo "正在克隆构建工具..." &&
-          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip -o build-tools.zip &&
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang19-r536225/build-tools.zip -o build-tools.zip &&
           unzip -q build-tools.zip &&
           rm -rf build-tools.zip &
+          
+          # (可选) 如果需要Rust 支持，取消下面注释
+          echo "正在克隆Rust 工具链..." &&
+          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang19-r536225/rust.zip -o rust.zip &&
+          unzip -q rust.zip -d rust &&
+          rm -rf rust.zip &
+            
           wait
-          echo "所有源码及llvm-Clang18工具链初始化完成！"
-          echo "正在去除 ABI 保护 & 去除 dirty 后缀..."
+          echo "所有源码及llvm-Clang19 工具链初始化完成！"
+          echo "正在去除ABI 保护 & 去除dirty后缀..."
           rm common/android/abi_gki_protected_exports_* || true
           for f in common/scripts/setlocalversion; do
             sed -i 's/ -dirty//g' "$f"
@@ -355,9 +362,10 @@ jobs:
         run: |
           WORKDIR="$(pwd)"
           export PATH="/usr/lib/ccache:$PATH"
-          export PATH="$WORKDIR/kernel_workspace/clang18/bin:$PATH"
+          export PATH="$WORKDIR/kernel_workspace/clang19/bin:$PATH"
           export PATH="$WORKDIR/kernel_workspace/build-tools/bin:$PATH"
-          CLANG_DIR="$WORKDIR/kernel_workspace/clang18/bin"
+          export PATH="$WORKDIR/kernel_workspace/rust/bin:$PATH"
+          CLANG_DIR="$WORKDIR/kernel_workspace/clang19/bin"
           CLANG_VERSION="$($CLANG_DIR/clang --version | head -n 1)"
           LLD_VERSION="$($CLANG_DIR/ld.lld --version | head -n 1)"
           pahole_version=$(pahole --version 2>/dev/null | head -n1); [ -z "$pahole_version" ] && echo "pahole版本：未安装" || echo "pahole版本：$pahole_version"
