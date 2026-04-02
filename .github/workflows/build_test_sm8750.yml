@@ -60,12 +60,12 @@ jobs:
           cd kernel_workspace
           sudo apt-mark hold firefox &&
           sudo apt-mark hold libc-bin &&
-          sudo apt purge man-db &&
+          sudo apt purge man-db &&`
           sudo rm -rf /var/lib/man-db/auto-update &&
           sudo apt update &&
           sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
           echo "正在克隆源码仓库..."
-          aria2c -s16 -x16 -k1M https://github.com/brokestar233/android_kernel_common_oneplus_sm8750/archive/refs/heads/6.6-final.zip -o common.zip
+          aria2c -s16 -x16 -k1M https://github.com/Dva-Hook/android_kernel_common_oneplus_sm8750/archive/refs/heads/6.6-final.zip -o common.zip
           unzip -q common.zip && 
           mv "android_kernel_common_oneplus_sm8750-6.6-final" common
           rm -rf common.zip 
@@ -341,64 +341,13 @@ jobs:
           #Remove check_defconfig
           sudo sed -i 's/check_defconfig//' ./common/build.config.gki
 
-      - name: 🔧 Set Kernel name (设置内核名称 & 验证)
+      - name: 🔧 Set Kernel name (设置内核名称)
         run: |
           cd kernel_workspace
-          echo "🎯 目标后缀：$DEFAULT_SUFFIX"
-
-          file1=./common/scripts/setlocalversion
-          file2=./common/arch/arm64/configs/gki_defconfig
-
-          # 转义suffix (防止特殊字符导致 sed报错)
+          echo "内核后缀: $DEFAULT_SUFFIX"
           ESCAPED_SUFFIX=$(printf '%s\n' "$DEFAULT_SUFFIX" | sed 's:[\/&]:\\&:g')
-
-          echo "🔨 开始执行替换..."
-
-          # === 1. 修改defconfig ===
-          # 将 -Brokestar 替换为你的自定义后缀
-          sudo sed -i "s/-Brokestar/$ESCAPED_SUFFIX/g" "$file2"
-          ret2=$?
-
-          # === 2. 修改setlocalversion ===
-          # 移除 ${scm_version} 占位符
-          sed -i 's/${scm_version}//' "$file1"
-          
-          # 【优化点】直接删除 -OKI，避免产生双横杠 (--)
-          # 原逻辑：s/\${KERNELVERSION}-OKI/\${KERNELVERSION}-/  --> 会产生 --
-          # 新逻辑：直接删掉 -OKI 字符串
-          sudo sed -i 's/-OKI//g' "$file1"
-          ret1=$?
-
-          # === 判断是否成功 ===
-          if [ $ret1 -eq 0 ] && ! grep -q '\-OKI' "$file1"; then
-            status1="✅ SUCCESS"
-          else
-            status1="❌ FAILED"
-          fi
-
-          if [ $ret2 -eq 0 ] && ! grep -q -- "-Brokestar" "$file2"; then
-            status2="✅ SUCCESS"
-          else
-            status2="❌ FAILED"
-          fi
-
-          # === 输出结果 ===
-          echo ""
-          echo "===== 📝 修改结果 ====="
-          echo "setlocalversion: $status1"
-          echo "gki_defconfig:   $status2"
-          echo ""
-          echo "===== 🔍 最终内容检查 ====="
-          
-          echo "--- setlocalversion (版本生成逻辑) ---"
-          grep "KERNELVERSION" "$file1" || echo "(未找到相关行)"
-
-          echo "--- gki_defconfig (本地版本定义) ---"
-          grep "CONFIG_LOCALVERSION" "$file2" || echo "(未找到相关行)"
-          
-          if [[ "$status1" == *"FAILED"* ]] || [[ "$status2" == *"FAILED"* ]]; then
-            exit 1
-          fi
+          sudo sed -i "s/-4k/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
+          sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           
       - name: 📥 Start build timer (构建计时开始)
         run: 
