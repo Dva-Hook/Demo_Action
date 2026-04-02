@@ -33,7 +33,7 @@ on:
         required: true
         default: true
         type: boolean
-
+        
       enable_bbg:
         description: "开启BBG基带守护"
         required: true
@@ -546,73 +546,76 @@ jobs:
           echo "BUILD_START=$(date +%s)" >> $GITHUB_ENV
 
 
-      - name: 🔨 Build Kernel (构建内核 - 防OOM 稳定版)
+      - name: 🔨 Build Kernel (构建内核)
         run: |
           WORKDIR="$(pwd)"
-          
-          # 设置环境变量
           export PATH="/usr/lib/ccache:$PATH"
           export PATH="$WORKDIR/kernel_workspace/clang19/bin:$PATH"
           export PATH="$WORKDIR/kernel_workspace/build-tools/bin:$PATH"
           export PATH="$WORKDIR/kernel_workspace/rust/bin:$PATH"
-          
-          # 配置CCache
+          CLANG_DIR="$WORKDIR/kernel_workspace/clang19/bin"
+          CLANG_VERSION="$($CLANG_DIR/clang --version | head -n 1)"
+          LLD_VERSION="$($CLANG_DIR/ld.lld --version | head -n 1)"
+          pahole_version=$(pahole --version 2>/dev/null | head -n1); [ -z "$pahole_version" ] && echo "pahole 版本：未安装" || echo "pahole版本：$pahole_version"
           export CCACHE_LOGFILE="${{ github.workspace }}/kernel_workspace/ccache.log"
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_BASEDIR="${{ github.workspace }}"
           export CCACHE_NOHASHDIR="true"
           export CCACHE_HARDLINK="true"
           export CCACHE_DIR="${{ env.CCACHE_DIR }}"
-          export CCACHE_MAXSIZE="10G"
+          export CCACHE_MAXSIZE="3G"
           echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$CCACHE_DIR/ccache.conf"
           
           cd kernel_workspace/common
           
-          # 🔧 修复 CPU架构标志 (保留原有逻辑)
+          # 🛠️ [关键修复] 强制替换不支持的 oryon-1 为通用的cortex-a76
+          # 这能解决clang 19 尚未完全支持oryon-1导致的编译错误
           echo "🔧 正在修复CPU架构标志兼容性..."
           sed -i 's/-mcpu=oryon-1/-mcpu=cortex-a76/g' arch/arm64/Makefile
           sed -i 's/-mcpu=oryon-1/-mcpu=cortex-a76/g' Makefile
+          # 以防万一，在全局搜索替换
           find . -name "Makefile*" -type f -exec sed -i 's/-mcpu=oryon-1/-mcpu=cortex-a76/g' {} \; 2>/dev/null || true
-          
-          # ⏰ 设置构建时间戳
+          echo "✅ CPU 标志修复完成，将继续使用cortex-a76 进行优化编译"
+
+          wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfakestat.so
+          wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfaketimeMT.so
+          chmod 777 ./*.so
+          export FAKESTAT="2025-05-25 12:00:00"
+          export FAKETIME="@2025-05-25 13:00:00"
+          echo "FAKESTAT=$FAKESTAT" >> $GITHUB_ENV
+          echo "FAKETIME=$FAKETIME" >> $GITHUB_ENV
+          SO_DIR=$(pwd)
+          export PRELOAD_LIBS="$SO_DIR/libfakestat.so $SO_DIR/libfaketimeMT.so"
+          echo '#!/bin/bash' > cc-wrapper
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> cc-wrapper
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> cc-wrapper
+          echo 'export FAKETIME="'$FAKETIME'"' >> cc-wrapper
+          echo 'ccache clang "$@"' >> cc-wrapper
+          echo '#!/bin/bash' > ld-wrapper
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> ld-wrapper
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> ld-wrapper
+          echo 'export FAKETIME="'$FAKETIME'"' >> ld-wrapper
+          echo 'ld.lld "$@"' >> ld-wrapper
+          echo '#!/bin/bash' > test-wrapper.sh
+          echo 'export LD_PRELOAD="'$PRELOAD_LIBS'"' >> test-wrapper.sh
+          echo 'export FAKESTAT="'$FAKESTAT'"' >> test-wrapper.sh
+          echo 'export FAKETIME="'$FAKETIME'"' >> test-wrapper.sh
+          echo 'echo ">>> Wrapper 内部环境检查完毕."' >> test-wrapper.sh
+          echo 'exec "$@"' >> test-wrapper.sh
+          chmod +x test-wrapper.sh
+          ./test-wrapper.sh date
+          ./test-wrapper.sh stat ./Makefile
+          chmod +x cc-wrapper ld-wrapper
+          LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
           export KBUILD_BUILD_TIMESTAMP="${KERNEL_TIME}"
-          echo "使用官方时间戳：$KBUILD_BUILD_TIMESTAMP"
-          
-          # 🗑️ 再次清理空间以防万一
-          sudo rm -rf /usr/share/dotnet || true
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /opt/ghc || true
-          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-          df -h
-          
-          # 📢 [关键修改] 定义并行度
-          # GitHub Actions默认nproc可能是 4或 8，但在链接大文件时容易爆内存
-          # 这里强制使用一半的核心数，如果还是报错，可以手动改为 -j4
-          CORES=$(nproc --all)
-          HALF_CORES=$((CORES / 2))
-          if [ $HALF_CORES -lt 2 ]; then HALF_CORES=2; fi
-          echo "🚀 检测到 $CORES核心，本次构建使用 $HALF_CORES并行线程以防止 OOM"
-          
-          # 🛠️ 开始编译
-          # 移除所有LD_PRELOAD 和 wrapper，直接使用干净的 clang + lld
-          MAKE_FLAGS="LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=\"ccache clang\" LD=\"ld.lld\" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error"
-          
-          echo "⚙️ 正在生成配置..."
-          make -j$HALF_CORES $MAKE_FLAGS gki_defconfig
-          
-          echo "🔥 开始编译内核镜像(监控内存中...)..."
-          # 如果依然报错，请观察日志中是否有"Killed"字样，那是 OOM的铁证
-          make -j$HALF_CORES $MAKE_FLAGS Image V=1 2>&1 | tee build.log
-          
-          # 🕵️ 检查构建结果
-          if [ $? -ne 0 ]; then
-            echo "::error::编译失败！尝试从日志末尾提取错误信息："
-            tail -n 100 build.log | grep -i "error\|fatal\|killed" || true
-            exit 1
-          fi
-          
-          echo "✅ 编译成功！"
-          ls -lh out/arch/arm64/boot/Image
+          sudo rm -rf /usr/share/dotnet &
+          sudo rm -rf /usr/local/lib/android &
+          sudo rm -rf /opt/ghc &
+          sudo rm -rf /opt/hostedtoolcache/CodeQL &
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" LD="ld.lld" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error gki_defconfig &&
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error Image
+          LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
+          echo "ccache 状态："
           ccache -s
       
       - name: 🕒 Calculate build time (计算构建时间)
