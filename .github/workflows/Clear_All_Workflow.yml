@@ -72,73 +72,98 @@ jobs:
           set -e
 
           echo "当前仓库：$REPO"
-          echo "查找工作流 \"$WORKFLOW_NAME\" 的 ID..."
-          WORKFLOW_ID=$(gh api repos/$REPO/actions/workflows | jq -r ".workflows[] | select(.name == \"$WORKFLOW_NAME\") | .id")
-          if [ -z "$WORKFLOW_ID" ]; then
-            echo "未找到工作流 \"$WORKFLOW_NAME\"，退出。"
+          echo "查找工作流 \"$WORKFLOW_NAME\" 的ID..."
+          
+          # 获取工作流列表并查找ID
+          WORKFLOW_JSON=$(gh api repos/$REPO/actions/workflows)
+          WORKFLOW_ID=$(echo "$WORKFLOW_JSON" | jq -r ".workflows[] | select(.name == \"$WORKFLOW_NAME\") | .id")
+          
+          if [ -z "$WORKFLOW_ID" ] || [ "$WORKFLOW_ID" == "null" ]; then
+            echo "❌ 未找到工作流 \"$WORKFLOW_NAME\""
+            echo "可用工作流列表:"
+            echo "$WORKFLOW_JSON" | jq -r '.workflows[].name'
             exit 1
           fi
+          echo "✅ 找到工作流 ID: $WORKFLOW_ID"
 
+          echo "🚀 开始获取运行记录(使用 --paginate自动分页)..."
+          
+          # 【关键修复】使用 --paginate自动处理所有分页，避免手动循环导致的JSON解析错误
+          # 添加 --silent 减少无关输出，确保拿到纯净JSON
+          ALL_RUNS=$(gh api --paginate "repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?per_page=100" | jq '.workflow_runs')
+          
+          TOTAL_COUNT=$(echo "$ALL_RUNS" | jq 'length')
+          echo "共获取到 $TOTAL_COUNT 条运行记录。"
 
-          echo "开始分页获取所有运行记录..."
-          PER_PAGE=100
-          PAGE=1
-          MATCHED_RUNS="[]"
-          while true; do
-            RESP=$(gh api "repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?per_page=$PER_PAGE&page=$PAGE")
-            RUNS=$(echo "$RESP" | jq '.workflow_runs')
-            COUNT_THIS_PAGE=$(echo "$RUNS" | jq 'length')
-
-            if [ "$COUNT_THIS_PAGE" -eq 0 ]; then
-              break
-            fi
-
-            MATCHED_RUNS=$(jq -s 'add' <(echo "$MATCHED_RUNS") <(echo "$RUNS"))
-            PAGE=$((PAGE + 1))
-          done
-
-          echo "共获取到 $(echo "$MATCHED_RUNS" | jq 'length') 条运行记录。"
-
-          # 排序顺序：旧到新 or 新到旧
-          if [[ "$REVERSE_ORDER" == "true" ]]; then
-            SORTED_RUNS=$(echo "$MATCHED_RUNS" | jq 'sort_by(.run_started_at)')
-          else
-            SORTED_RUNS=$(echo "$MATCHED_RUNS" | jq 'sort_by(.run_started_at) | reverse')
+          if [ "$TOTAL_COUNT" -eq 0 ]; then
+            echo "没有需要处理的记录。"
+            exit 0
           fi
 
-          # 仅保留前 N 条
-          TO_DELETE_RUNS=$(echo "$SORTED_RUNS" | jq ".[0:${COUNT}]")
+          # 排序逻辑
+          if [[ "$REVERSE_ORDER" == "true" ]]; then
+            # 旧到新(时间戳小的在前)
+            SORTED_RUNS=$(echo "$ALL_RUNS" | jq 'sort_by(.run_started_at)')
+          else
+            # 新到旧(时间戳大的在前)
+            SORTED_RUNS=$(echo "$ALL_RUNS" | jq 'sort_by(.run_started_at) | reverse')
+          fi
 
-          echo "$TO_DELETE_RUNS" | jq -c '.[]' | while read run; do
+          # 截取需要删除的数量
+          TO_DELETE_RUNS=$(echo "$SORTED_RUNS" | jq ".[0:${COUNT}]")
+          DELETE_COUNT=$(echo "$TO_DELETE_RUNS" | jq 'length')
+          
+          echo "计划检查并可能删除 $DELETE_COUNT 条记录..."
+
+          # 执行删除
+          echo "$TO_DELETE_RUNS" | jq -c '.[]' | while read -r run; do
             ID=$(echo "$run" | jq -r '.id')
-            STATUS=$(echo "$run" | jq -r '.conclusion')
+            STATUS=$(echo "$run" | jq -r '.conclusion // "null"')
             STATE=$(echo "$run" | jq -r '.status')
 
+            # 跳过正在运行或排队的任务
             if [[ "$STATE" == "in_progress" || "$STATE" == "queued" ]]; then
-              echo "跳过运行 ID: $ID（状态为 $STATE）"
+              echo "⏭️  跳过运行ID: $ID (状态：$STATE)"
               continue
             fi
 
-            if [[ "$STATUS" == "failure" && "$DELETE_FAILED" != "true" ]]; then continue; fi
-            if [[ "$STATUS" == "success" && "$DELETE_SUCCESS" != "true" ]]; then continue; fi
-            if [[ "$STATUS" == "cancelled" && "$DELETE_CANCELLED" != "true" ]]; then continue; fi
+            # 根据用户选项过滤
+            SHOULD_DELETE=false
+            
+            if [[ "$STATUS" == "failure" && "$DELETE_FAILED" == "true" ]]; then SHOULD_DELETE=true; fi
+            if [[ "$STATUS" == "success" && "$DELETE_SUCCESS" == "true" ]]; then SHOULD_DELETE=true; fi
+            if [[ "$STATUS" == "cancelled" && "$DELETE_CANCELLED" == "true" ]]; then SHOULD_DELETE=true; fi
+            # 处理status 为null 的情况(有时刚结束还没结论)
+            if [[ "$STATUS" == "null" && "$STATE" == "completed" && "$DELETE_SUCCESS" == "true" ]]; then SHOULD_DELETE=true; fi
 
-            echo "删除运行记录 ID: $ID (状态: $STATUS)"
-            gh api -X DELETE "repos/$REPO/actions/runs/$ID" || echo "删除失败"
+            if [[ "$SHOULD_DELETE" == "true" ]]; then
+              echo "🗑️  正在删除运行记录ID: $ID (状态：$STATUS)"
+              # 忽略单个删除失败的错误，继续执行
+              gh api -X DELETE "repos/$REPO/actions/runs/$ID" || echo "⚠️ 删除 ID $ID 失败"
+            else
+              echo "⏭️  跳过运行ID: $ID (状态：$STATUS, 不符合删除条件)"
+            fi
           done
 
-          echo "清理本工作流运行记录..."
-          SELF_WORKFLOW_ID=$(gh api repos/$REPO/actions/workflows | jq -r '.workflows[] | select(.name == "清理工作流运行记录") | .id')
-          if [ -n "$SELF_WORKFLOW_ID" ]; then
-            SELF_RUNS=$(gh api "repos/$REPO/actions/workflows/$SELF_WORKFLOW_ID/runs?per_page=50" | jq -c '.workflow_runs[]')
-
-            echo "$SELF_RUNS" | while read run; do
+          # --- 清理本工作流的历史记录 ---
+          echo ""
+          echo "🧹 开始清理本工作流 (清理工作流运行记录) 的历史运行..."
+          SELF_WORKFLOW_ID=$(echo "$WORKFLOW_JSON" | jq -r '.workflows[] | select(.name == "清理工作流运行记录") | .id')
+          
+          if [ -n "$SELF_WORKFLOW_ID" ] && [ "$SELF_WORKFLOW_ID" != "null" ]; then
+            # 同样使用 paginate获取
+            SELF_RUNS_JSON=$(gh api --paginate "repos/$REPO/actions/workflows/$SELF_WORKFLOW_ID/runs?per_page=50")
+            
+            echo "$SELF_RUNS_JSON" | jq -c '.workflow_runs[]' | while read -r run; do
               ID=$(echo "$run" | jq -r '.id')
               if [[ "$ID" == "$CURRENT_RUN_ID" ]]; then
-                echo "跳过当前运行 ID: $ID"
                 continue
               fi
-              echo "删除本工作流运行记录 ID: $ID"
-              gh api -X DELETE "repos/$REPO/actions/runs/$ID" || echo "删除失败"
+              echo "🗑️  删除本工作流历史纪录 ID: $ID"
+              gh api -X DELETE "repos/$REPO/actions/runs/$ID" || true
             done
+          else
+            echo "未找到本工作流的 ID，跳过自我清理。"
           fi
+
+          echo "✅ 清理完成!"
