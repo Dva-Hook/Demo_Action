@@ -341,36 +341,16 @@ jobs:
           #Remove check_defconfig
           sudo sed -i 's/check_defconfig//' ./common/build.config.gki
 
-      - name: 🔧 Set Kernel name (设置内核名称 & 移除硬编码OKI)
+      - name: 🔧 Set Kernel name (设置内核名称)
         run: |
           cd kernel_workspace
-          echo "默认后缀：$DEFAULT_SUFFIX"
+          echo "内核后缀: $DEFAULT_SUFFIX"
           ESCAPED_SUFFIX=$(printf '%s\n' "$DEFAULT_SUFFIX" | sed 's:[\/&]:\\&:g')
-          
-          # 1. 【核心修复】移除 scripts/setlocalversion 中硬编码的 "-OKI"
-          # 将：echo "${KERNELVERSION}-OKI${config_localversion}${LOCALVERSION}"
-          # 改为：echo "${KERNELVERSION}${config_localversion}${LOCALVERSION}"
-          if grep -q "\-OKI" ./common/scripts/setlocalversion; then
-            echo "🔍 发现硬编码的 -OKI 标记，正在移除..."
-            sed -i 's/-OKI//g' ./common/scripts/setlocalversion
-            echo "✅ 已移除 -OKI"
-          else
-            echo "ℹ️ 未发现 -OKI标记"
-          fi
-          
-          # 2. 【清理残留】删除可能存在的localversion 文件
-          find ./common -name "localversion*" -type f -delete
-          
-          # 3. 【替换后缀】处理defconfig 中的旧名称 (如 -Brokestar)
-          # 即使defconfig 里没有这行，sed 也不会报错
-          sed -i "s/-Brokestar/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
-          
-          # 4. 【移除占位符】防止 ${scm_version}干扰
+          sudo sed -i "s/-OKI-Brokestar/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
-          
-          # 5. 【验证】显示修改后的关键行
-          echo "🔎 修改后的setlocalversion关键行:"
-          grep "KERNELVERSION" ./common/scripts/setlocalversion
+          sed -i 's/-OKI//g' ./common/scripts/setlocalversion
+          grep "CONFIG_LOCALVERSION" ./common/arch/arm64/configs/gki_defconfig || true
+          grep "KERNELVERSION" ./common/scripts/setlocalversion || true
           
       - name: 📥 Start build timer (构建计时开始)
         run: 
