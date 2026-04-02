@@ -83,15 +83,22 @@ jobs:
       
       - name: 🧹 Force Clean Disk Space (强制清理磁盘空间)
         run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo rm -rf /usr/local/.ghcup
-          sudo rm -rf /var/lib/docker
-          sudo apt-get remove -y azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri
-          sudo apt-get autoremove -y
-          sudo apt-get clean
+          echo "🗑️ 开始清理磁盘空间以容纳内核编译..."
+          
+          # 使用 || true忽略“包未安装”的错误，防止流程中断
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /var/lib/docker || true
+          
+          # 安全地卸载大软件包 (加上 -y和 || true)
+          sudo apt-get remove -y --purge azure-cli google-chrome-stable firefox powershell mono-devel libgl1-mesa-dri hhvm google-cloud-sdk || true
+          sudo apt-get autoremove -y || true
+          sudo apt-get clean || true
+          
+          echo "✅ 清理完成，当前磁盘空间:"
           df -h
 
       - name: 🛠 Install dependencies and Initialize repo and sync （安装环境依赖 + 初始化源码仓库及工具链）
