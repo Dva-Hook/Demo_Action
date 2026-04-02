@@ -19,8 +19,8 @@ on:
         required: true
         type: choice
         options:
-          - 'oneplus_ace5_pro'
-        default: 'oneplus_ace5_pro'
+          - '6.6-lts'
+        default: '6.6-lts'
 
       enable_ReKernel:
         description: "启用Re-Kernel支持"
@@ -525,6 +525,7 @@ jobs:
           echo "内核后缀: $DEFAULT_SUFFIX"
           ESCAPED_SUFFIX=$(printf '%s\n' "$DEFAULT_SUFFIX" | sed 's:[\/&]:\\&:g')
           sudo sed -i "s/-4k/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
+          sudo sed -i "s/^SUBLEVEL = .*/SUBLEVEL = 129/" ./common/Makefile
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           
       - name: 📥 Start build timer (构建计时开始)
