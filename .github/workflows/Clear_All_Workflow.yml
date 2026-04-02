@@ -9,7 +9,7 @@ on:
         required: true
         default: 'Build_oneplus_sm8750'
         options:
-          - Build_all_devices_sm8750
+          - Build_All_Devices_SM8750
           - Build_oneplus_sm8750
           - Build_Lenovo_sm8750
           - Build_oneplus_sm8650
