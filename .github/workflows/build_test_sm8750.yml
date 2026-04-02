@@ -493,17 +493,6 @@ jobs:
             }
 
             core.info(`旧缓存清理完成，共删除 ${deleted} 个缓存`);
-
-      - name: 📦 ReName Image  (修改镜像名)
-        run: |
-          cd kernel_workspace/common/out/arch/arm64/boot
-          cp ./Image "./${IMAGENAME}"
-
-      - name: 📤 Upload Image (上传 Image)
-        uses: actions/upload-artifact@v5
-        with:
-         name: ${{ env.IMAGENAME }}
-         path: kernel_workspace/common/out/arch/arm64/boot/${{ env.IMAGENAME }}
         
       - name: 📦 Make AnyKernel3 (创建Anykernel3)
         run: |
