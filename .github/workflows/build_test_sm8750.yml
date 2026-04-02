@@ -368,7 +368,7 @@ jobs:
           CLANG_DIR="$WORKDIR/kernel_workspace/clang19/bin"
           CLANG_VERSION="$($CLANG_DIR/clang --version | head -n 1)"
           LLD_VERSION="$($CLANG_DIR/ld.lld --version | head -n 1)"
-          pahole_version=$(pahole --version 2>/dev/null | head -n1); [ -z "$pahole_version" ] && echo "pahole版本：未安装" || echo "pahole版本：$pahole_version"
+          pahole_version=$(pahole --version 2>/dev/null | head -n1); [ -z "$pahole_version" ] && echo "pahole 版本：未安装" || echo "pahole版本：$pahole_version"
           export CCACHE_LOGFILE="${{ github.workspace }}/kernel_workspace/ccache.log"
           export CCACHE_COMPILERCHECK="none"
           export CCACHE_BASEDIR="${{ github.workspace }}"
@@ -377,7 +377,18 @@ jobs:
           export CCACHE_DIR="${{ env.CCACHE_DIR }}"
           export CCACHE_MAXSIZE="3G"
           echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,pch_defines,file_macro,time_macros" >> "$CCACHE_DIR/ccache.conf"
+          
           cd kernel_workspace/common
+          
+          # 🛠️ [关键修复] 强制替换不支持的 oryon-1 为通用的cortex-a76
+          # 这能解决clang 19 尚未完全支持oryon-1导致的编译错误
+          echo "🔧 正在修复CPU架构标志兼容性..."
+          sed -i 's/-mcpu=oryon-1/-mcpu=cortex-a76/g' arch/arm64/Makefile
+          sed -i 's/-mcpu=oryon-1/-mcpu=cortex-a76/g' Makefile
+          # 以防万一，在全局搜索替换
+          find . -name "Makefile*" -type f -exec sed -i 's/-mcpu=oryon-1/-mcpu=cortex-a76/g' {} \; 2>/dev/null || true
+          echo "✅ CPU 标志修复完成，将继续使用cortex-a76 进行优化编译"
+
           wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfakestat.so
           wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/libfaketimeMT.so
           chmod 777 ./*.so
@@ -416,7 +427,7 @@ jobs:
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" LD="ld.lld" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error gki_defconfig &&
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="$(pwd)/cc-wrapper" LD="$(pwd)/ld-wrapper" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error Image
           LD_PRELOAD=$PRELOAD_LIBS stat ./Makefile
-          echo "ccache状态："
+          echo "ccache 状态："
           ccache -s
       
       - name: 🕒 Calculate build time (计算构建时间)
