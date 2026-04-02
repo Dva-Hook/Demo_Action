@@ -60,7 +60,7 @@ jobs:
           cd kernel_workspace
           sudo apt-mark hold firefox &&
           sudo apt-mark hold libc-bin &&
-          sudo apt purge man-db &&`
+          sudo apt purge man-db &&
           sudo rm -rf /var/lib/man-db/auto-update &&
           sudo apt update &&
           sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
