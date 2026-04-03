@@ -430,7 +430,7 @@ jobs:
           echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
           echo "✅ Re-Kernel配置已注入"
 
-            - name: 🔧 Add Re-Kernel Support
+      - name: 🔧 Add Re-Kernel Support
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         working-directory: kernel_workspace/common
         run: |
