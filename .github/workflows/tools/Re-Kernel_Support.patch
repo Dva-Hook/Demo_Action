@@ -26,8 +26,6 @@ index 0000000000000..c04ff0bda9cd1
 --- /dev/null
 +++ b/drivers/rekernel/Kconfig
 @@ -0,0 +1,16 @@
-+menu "Re:Kernel"
-+
 +config REKERNEL
 +	tristate "Re:Kernel module"
 +	depends on MODULES
@@ -42,7 +40,6 @@ index 0000000000000..c04ff0bda9cd1
 +    default n
 +    help
 +	  Allow ReKernel to listen to network activity then send signal to tombstone.
-+endmenu
 diff --git a/drivers/rekernel/Makefile b/drivers/rekernel/Makefile
 new file mode 100644
 index 0000000000000..bb613644a5f46
