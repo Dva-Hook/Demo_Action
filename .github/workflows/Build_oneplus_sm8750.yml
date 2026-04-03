@@ -426,7 +426,7 @@ jobs:
           }
           rm -f Re-Kernel_Support.patch
           
-          echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_REKERNEL=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
           echo "✅ Re-Kernel配置已注入"
 
