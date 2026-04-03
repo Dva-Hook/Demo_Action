@@ -723,7 +723,6 @@ jobs:
                   deleted++;
                 }
               }
-
               if (caches.length < 100) {
                 break;
               }
