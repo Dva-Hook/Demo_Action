@@ -49,7 +49,7 @@ index 0000000000000..bb613644a5f46
 +obj-$(CONFIG_REKERNEL) += rekernel.o
 +ccflags-$(CONFIG_REKERNEL_NETWORK) += -DNETWORK_FILTER
 +ccflags-y += -I$(srctree)/drivers/android
-+CFLAGS_rekernel.o += -fno-cfi-icall
++CFLAGS_rekernel.o += $(CC_FLAGS_CFI)
 diff --git a/drivers/rekernel/rekernel.c b/drivers/rekernel/rekernel.c
 new file mode 100644
 index 0000000000000..a89fba320c81c

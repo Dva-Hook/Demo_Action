@@ -435,15 +435,9 @@ jobs:
         working-directory: kernel_workspace/common
         run: |
           PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/Re-Kernel_Support.patch"
-          [ ! -f "$PATCH_FILE" ] && echo "::error::未找到补丁" && exit 1
-          
-          cp "$PATCH_FILE" .
+          cp "$PATCH_FILE" ./
           patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/rk.log || true
           rm -f Re-Kernel_Support.patch
-
-          # 🔑 关键修复：将 GCC专属标志替换为内核标准跨编译器写法
-          sed -i 's/CFLAGS_rekernel.o += -fno-cfi-icall/CFLAGS_REMOVE_rekernel.o += $(CC_FLAGS_CFI)/' drivers/rekernel/Makefile
-
           echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
           echo "✅ Re-Kernel配置已注入"
