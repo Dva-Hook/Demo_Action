@@ -146,13 +146,20 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_TAG="exported-ccaches"
+          UPLOAD_NAME="ccache-${TARGET}.tar.zst"
+          if [ "${ARCHIVE_NAME}" != "${UPLOAD_NAME}" ]; then
+            echo "重命名: ${ARCHIVE_NAME} → ${UPLOAD_NAME}"
+            cp "${ARCHIVE_NAME}" "${UPLOAD_NAME}"
+          fi
 
-          echo "正在上传 ${ARCHIVE_NAME} 到 ${TARGET_REPO}@${RELEASE_TAG} ..."
+          echo "正在上传 ${UPLOAD_NAME} 到 ${TARGET_REPO}@${RELEASE_TAG} ..."
 
           if ! gh release view "$RELEASE_TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
             echo "Release ${RELEASE_TAG} 不存在，正在创建..."
-            gh release create "$RELEASE_TAG" --repo "$TARGET_REPO" --title "Exported Ccache Archives" --generate-notes
+            RELEASE_TIME=$(TZ='Asia/Shanghai' date '+%Y-%m-%d-%H:%M')
+            RELEASE_NOTES="📱 GKI/OKI_6.x全版本内核公共ccache缓存\n更新时间: ${RELEASE_TIME}"
+            gh release create "$RELEASE_TAG" --repo "$TARGET_REPO" --title "Exported Ccache Archives" --notes "$RELEASE_NOTES"
           fi
 
-          gh release upload "$RELEASE_TAG" "${ARCHIVE_NAME}" --repo "$TARGET_REPO" --clobber
+          gh release upload "$RELEASE_TAG" "${UPLOAD_NAME}" --repo "$TARGET_REPO" --clobber
           echo "上传完成！"
