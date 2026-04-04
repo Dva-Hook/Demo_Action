@@ -8,6 +8,22 @@ on:
         required: false
         default: ""
 
+      upload_to_releases:
+        description: "是否同时上传到指定仓库的 Releases"
+        required: false
+        default: false
+        type: boolean
+
+      target_repo:
+        description: "目标仓库 (格式: owner/repo)，仅在上方勾选时生效"
+        required: false
+        default: ""
+
+      target_token:
+        description: "目标仓库的Personal Access Token (需repo 权限)，仅在上方勾选时生效"
+        required: false
+        default: ""
+
 permissions:
   contents: read
   actions: read
@@ -120,3 +136,23 @@ jobs:
           name: exported-${{ env.CACHE_KEY }}
           path: ${{ env.ARCHIVE_NAME }}
           if-no-files-found: error
+
+      - name: 上传到目标 Releases
+        if: ${{ github.event.inputs.upload_to_releases == 'true' && github.event.inputs.target_repo != '' && github.event.inputs.target_token != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.event.inputs.target_token }}
+          TARGET_REPO: ${{ github.event.inputs.target_repo }}
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="exported-ccaches"
+
+          echo "正在上传 ${ARCHIVE_NAME} 到 ${TARGET_REPO}@${RELEASE_TAG} ..."
+
+          if ! gh release view "$RELEASE_TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} 不存在，正在创建..."
+            gh release create "$RELEASE_TAG" --repo "$TARGET_REPO" --title "Exported Ccache Archives" --generate-notes
+          fi
+
+          gh release upload "$RELEASE_TAG" "${ARCHIVE_NAME}" --repo "$TARGET_REPO" --clobber
+          echo "上传完成！"
