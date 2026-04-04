@@ -401,27 +401,7 @@ jobs:
             echo "已自动插入 serialid_check.c 到 main.c"
           fi
 
-      - name: 🔧 Add Re-Kernel Support (添加Re-Kernel支持)
-        if: ${{ env.ENABLE_REKERNEL == 'true' }}
-        working-directory: kernel_workspace/common
-        run: |
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/Re-Kernel_Support.patch"
-          [ ! -f "$PATCH_FILE" ] && echo "::error::未找到补丁" && exit 1
-          
-          grep -q "CONFIG_REKERNEL" arch/arm64/configs/gki_defconfig 2>/dev/null && { echo "✓ 已存在，跳过"; exit 0; }
-          
-          cp "$PATCH_FILE" .
-          patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/rk.log || {
-            echo "::warning::Re-Kernel 补丁应用失败，尝试强制忽略冲突..."
-            patch -p1 -N --force --ignore-whitespace < Re-Kernel_Support.patch || true
-          }
-          rm -f Re-Kernel_Support.patch
-          
-          echo "CONFIG_REKERNEL=y" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
-          echo "✅ Re-Kernel配置已注入"
-
-      - name: 🔧 Add Re-Kernel Support
+      - name: 🔧 Add Re-Kernel Support (添加Rekernel支持)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         working-directory: kernel_workspace/common
         run: |
