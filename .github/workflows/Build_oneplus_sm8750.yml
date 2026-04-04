@@ -770,6 +770,7 @@ jobs:
          path: ./AnyKernel3/*
 
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
+        id: download-rekernel
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         uses: actions/github-script@v8
         env:
@@ -814,6 +815,7 @@ jobs:
         env:
           ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
           DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
+          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
         run: |
           set -euo pipefail
           echo "正在下载 Re-Kernel 模块: $ASSET_NAME"
@@ -821,11 +823,15 @@ jobs:
           aria2c -s16 -x16 -k1M "$DOWNLOAD_URL" -o "$ASSET_NAME"
           echo "✓ Re-Kernel 模块下载完成"
           ls -lh "$ASSET_NAME"
+          echo "正在创建目录 $ARTIFACT_NAME 并解压模块..."
+          mkdir -p "$ARTIFACT_NAME"
+          unzip -q "$ASSET_NAME" -d "$ARTIFACT_NAME"
+          echo "✓ 目录结构:"
+          ls -lR "$ARTIFACT_NAME"
 
       - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         uses: actions/upload-artifact@v5
         with:
-          name: Re-Kernel_${{ steps.download-rekernel.outputs.tag-name }}_6.6
-          path: kernel_workspace/${{ steps.download-rekernel.outputs.asset-name }}
-          
+          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          path: kernel_workspace/Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
