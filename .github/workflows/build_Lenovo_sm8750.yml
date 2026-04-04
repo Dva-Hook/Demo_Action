@@ -45,6 +45,12 @@ on:
         required: false
         default: false
         type: boolean
+      
+      enable_Adios:
+        description: "启用ADIOS IO调度器支持"
+        required: true
+        default: true
+        type: boolean
 
       enable_kpm:
         description: "启用KPM"
@@ -71,6 +77,7 @@ jobs:
       CUSTOM_KERNEL_SUFFIX: ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME: ${{ github.event.inputs.custom_kernel_time }}
       ENABLE_REKERNEL: ${{ github.event.inputs.enable_ReKernel }}
+      ENABLE_ADIOS:           ${{ github.event.inputs.enable_Adios }}
       ENABLE_BBG: ${{ github.event.inputs.enable_bbg }}
       ENABLE_KPM: ${{ github.event.inputs.enable_kpm }}
       ENABLE_SIGNED: ${{ github.event.inputs.enable_signed }}
@@ -349,99 +356,13 @@ jobs:
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         working-directory: kernel_workspace/common
         run: |
-          echo "开始添加 Re-Kernel 支持..."
-        
           PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/Re-Kernel_Support.patch"
-        
-          if [ ! -f "$PATCH_FILE" ]; then
-            echo "::error::未找到 Re-Kernel 补丁文件：$PATCH_FILE"
-            exit 1
-          fi
-          if grep -q "Re-Kernel" init/main.c 2>/dev/null || \
-              grep -q "re_kernel" init/main.c 2>/dev/null; then
-            echo "✓ Re-Kernel 支持已存在，跳过应用补丁"
-          fi
-          cp "$PATCH_FILE" ./Re-Kernel_Support.patch
-            echo "正在应用 Re-Kernel 补丁..."
-            if patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/patch.log; then
-              echo "✓ Re-Kernel 补丁应用成功"
-            else
-              echo "::warning::Re-Kernel 补丁应用出现问题，检查日志..."
-              if grep -q "malformed patch" /tmp/patch.log; then
-                echo "::warning::补丁文件格式问题，尝试强制应用..."
-                patch -p1 -N --force --ignore-whitespace < Re-Kernel_Support.patch || true
-                echo "✓ Re-Kernel 补丁已尽力应用，请手动验证"
-              else
-                echo "::warning::Re-Kernel 补丁应用失败"
-                cat /tmp/patch.log
-                exit 1
-              fi
-            fi
-          cd ..
-          echo "CONFIG_REKERNEL=y" >> ./common/arch/arm64/configs/gki_defconfig
+          cp "$PATCH_FILE" ./
+          patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/rk.log || true
           rm -f Re-Kernel_Support.patch
-
-      - name: 🔧 Add lz4armv8 Acceleration Support (添加 lz4armv8 硬件加速支持)
-        working-directory: kernel_workspace/common
-        run: |
-          echo "开始添加 LZ4 ARM64 硬件加速支持..."
-          
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/lz4armv8_support.patch"
-          
-          # 检查补丁文件是否存在
-          if [ ! -f "$PATCH_FILE" ]; then
-            echo "::error::未找到 LZ4 ARM64 补丁文件：$PATCH_FILE"
-            exit 1
-          fi
-          
-          # 检查是否已经应用过补丁
-          if [ -f "fs/f2fs/lz4armv8/lz4accel.c" ]; then
-            echo "✓ LZ4 ARM64 加速文件已存在，跳过应用补丁"
-          else
-            # 复制补丁文件到工作目录
-            cp "$PATCH_FILE" ./lz4armv8_support.patch
-            
-            # 应用补丁
-            echo "正在应用 LZ4 ARM64 硬件加速补丁..."
-            if patch -p1 --ignore-whitespace -F 3 < lz4armv8_support.patch 2>&1 | tee /tmp/lz4_patch.log; then
-              echo "✓ LZ4 ARM64 补丁应用成功"
-            else
-              echo "::warning::LZ4 ARM64 补丁应用出现问题，检查日志..."
-              if grep -q "malformed patch\|patch failed" /tmp/lz4_patch.log; then
-                echo "::warning::补丁文件格式问题或冲突，尝试强制应用..."
-                patch -p1 --force --ignore-whitespace < lz4armv8_support.patch || true
-                echo "✓ LZ4 ARM64 补丁已尽力应用"
-              else
-                echo "::error::LZ4 ARM64 补丁应用失败"
-                cat /tmp/lz4_patch.log
-                exit 1
-              fi
-            fi
-            
-            # 清理临时补丁文件
-            rm -f lz4armv8_support.patch
-          fi
-          
-          # 添加内核配置
-          echo "正在配置 LZ4 硬件加速相关选项..."
-          
-          # 启用 F2FS 压缩支持（如果未启用）
-          if ! grep -q "CONFIG_F2FS_COMPRESSION=y" arch/arm64/configs/gki_defconfig; then
-            echo "CONFIG_F2FS_COMPRESSION=y" >> arch/arm64/configs/gki_defconfig
-            echo "✓ 已启用 F2FS 压缩支持"
-          else
-            echo "✓ F2FS 压缩支持已启用"
-          fi
-          
-          # 启用 NEON 支持（ARM64 默认已启用，但显式声明）
-          if ! grep -q "CONFIG_KERNEL_MODE_NEON=y" arch/arm64/configs/gki_defconfig; then
-            echo "CONFIG_KERNEL_MODE_NEON=y" >> arch/arm64/configs/gki_defconfig
-            echo "✓ 已启用 NEON 模式支持"
-          else
-            echo "✓ NEON 模式支持已启用"
-          fi
-          
-          echo "✓ LZ4 ARM64 硬件加速支持配置完成"
+          echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
+          echo "✅ Re-Kernel配置已注入"
 
       - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler)
         working-directory: kernel_workspace/common
