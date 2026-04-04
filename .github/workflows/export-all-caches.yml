@@ -20,7 +20,7 @@ on:
         default: ""
 
       target_token:
-        description: "目标仓库的Personal Access Token (需repo 权限)，仅在上方勾选时生效"
+        description: "目标仓库的 PAT (Classic: 需repo作用域 / Fine-grained: 需Contents读写)，仅在上方勾选时生效"
         required: false
         default: ""
 
@@ -130,12 +130,12 @@ jobs:
           tar --use-compress-program='zstd -T0 -19' -cf "${{ env.ARCHIVE_NAME }}" -C "$HOME" "$(basename "${{ env.CCACHE_DIR }}")"
           ls -lh "${{ env.ARCHIVE_NAME }}"
 
-      - name: 上传导出包
-        uses: actions/upload-artifact@v5
-        with:
-          name: exported-${{ env.CACHE_KEY }}
-          path: ${{ env.ARCHIVE_NAME }}
-          if-no-files-found: error
+      # - name: 上传导出包
+      #   uses: actions/upload-artifact@v5
+      #   with:
+      #     name: exported-${{ env.CACHE_KEY }}
+      #     path: ${{ env.ARCHIVE_NAME }}
+      #     if-no-files-found: error
 
       - name: 上传到目标 Releases
         if: ${{ github.event.inputs.upload_to_releases == 'true' && github.event.inputs.target_repo != '' && github.event.inputs.target_token != '' }}
