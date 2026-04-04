@@ -266,8 +266,8 @@ jobs:
           DEVICE_NAME: ${{ env.DEVICES_NAME }}
         with:
           script: |
-            const repoName = process.env.PUBLIC_CACHE_REPO || 'showdo/Build_Oneplus_Realme_Action';
-            const releaseTag = process.env.PUBLIC_CACHE_TAG || 'Public_Ccache_SM8750';
+            const repoName = process.env.PUBLIC_CACHE_REPO || 'showdo/Public_Ccache';
+            const releaseTag = process.env.PUBLIC_CACHE_TAG || 'exported-ccaches';
             const [owner, repo] = repoName.split('/');
             const deviceName = process.env.DEVICE_NAME;
             let selected = null;
