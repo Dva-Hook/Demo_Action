@@ -91,19 +91,18 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout
+      - name: 📥 Checkout (检出代码)
         uses: actions/checkout@v4
       
-      - name: Set up Python
+      - name: 🔧 Set up Python (设置Python环境)
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       
-      - name: Install dependencies
+      - name: 📦 Install dependencies (安装依赖)
         run: pip install httpx beautifulsoup4
       
-      - name: Get OTA Download URL
-        id: get_ota
+      - name: 🔗 Get OTA Download URL (获取OTA下载链接)
         run: |
           python3 << 'PYEOF'
           import httpx
@@ -141,7 +140,6 @@ jobs:
           version = versions[version_index]
           print(f"Selected: {device} | {region} | {version}")
           
-          # POST to get download page
           post_data = {
               "device": device,
               "region": region,
@@ -153,17 +151,15 @@ jobs:
           
           post_soup = BeautifulSoup(post_resp.text, 'html.parser')
           
-          # Find download link - BeautifulSoup auto-decodes HTML entities
           download_url = None
           for a in post_soup.find_all('a', href=True):
-              href = a['href']  # Already decoded (&amp; → &)
+              href = a['href']
               if any(kw in href.lower() for kw in ['download', 'ota', 'firmware', 'update', '.zip']):
                   if href.startswith('http'):
                       download_url = href
                       break
           
           if not download_url:
-              # Try all links
               for a in post_soup.find_all('a', href=True):
                   href = a['href']
                   if href.startswith('http'):
@@ -181,7 +177,7 @@ jobs:
               f.write(f'version={version}\n')
           PYEOF
       
-      - name: Show OTA Info
+      - name: 📋 Show OTA Info (显示OTA信息)
         run: |
           echo "### 📱 设备信息" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -190,10 +186,10 @@ jobs:
           echo "- **版本**: ${{ steps.get_ota.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **OTA URL**: \`${{ steps.get_ota.outputs.ota_url }}\`" >> $GITHUB_STEP_SUMMARY
       
-      - name: Install payload-dumper
+      - name: 🛠️ Install payload-dumper (安装解包工具)
         run: pip install git+https://github.com/5ec1cff/payload-dumper
       
-      - name: Extract partitions
+      - name: 📂 Extract partitions (提取分区镜像)
         run: |
           PARTITIONS_ARG=""
           if [ -n "${{ inputs.partitions }}" ]; then
@@ -206,9 +202,7 @@ jobs:
             --out ./output \
             "${{ steps.get_ota.outputs.ota_url }}"
       
-      - name: Extract Kernel Info
-        if: inputs.extract_kernel_info == true
-        id: kernel_info
+      - name: 🔍 Extract Kernel Info (提取内核信息)
         run: |
           BOOT_IMG="output/boot.img"
           
@@ -234,7 +228,6 @@ jobs:
           def search_version(text):
               global kernel_version, kernel_time, full_string
               
-              # Pattern 1: Full string with version and time
               match = re.search(
                   r'Linux version (\S+)\s+\([^)]+\)\s+\([^)]+\)\s+#1\s+SMP\s+PREEMPT\s+(.+)',
                   text
@@ -245,7 +238,6 @@ jobs:
                   full_string = f"Linux version {kernel_version} ... #1 SMP PREEMPT {kernel_time}"
                   return True
               
-              # Pattern 2: Fragmented - find version and time separately
               ver_match = re.search(r'Linux\s+version\s+(\d+\.\d+\.\d+-[^\s]+)', text)
               if not ver_match:
                   ver_match = re.search(r'(\d+\.\d+\.\d+-android\d+-[^\s]+)', text)
@@ -262,16 +254,13 @@ jobs:
                   return True
               return False
           
-          # Method 1: Direct strings scan (works for uncompressed kernels)
           result = subprocess.run(['strings', boot_img_path], capture_output=True, text=True)
           if search_version(result.stdout):
               print("Found via direct strings scan")
           else:
-              # Method 2: Try to decompress kernel
               with open(boot_img_path, 'rb') as f:
                   boot_data = f.read()
               
-              # Find kernel offset
               kernel_offset = 0
               kernel_size = len(boot_data)
               
@@ -289,7 +278,6 @@ jobs:
               
               decompressed = None
               
-              # Try gzip
               try:
                   import gzip, io
                   gz_start = kernel_data.find(b'\x1f\x8b')
@@ -300,7 +288,6 @@ jobs:
               except Exception as e:
                   print(f"gzip failed: {e}")
               
-              # Try lz4
               if decompressed is None:
                   try:
                       lz4_start = kernel_data.find(b'\x04\x22\x4d\x18')
@@ -318,7 +305,7 @@ jobs:
                   except Exception as e:
                       print(f"lz4 failed: {e}")
               
-              # Try zstd
+
               if decompressed is None:
                   try:
                       zstd_start = kernel_data.find(b'\x28\xb5\x2f\xfd')
@@ -356,7 +343,7 @@ jobs:
                   f.write('found=false\n')
           PYEOF
       
-      - name: Show Kernel Info
+      - name: 📊 Show Kernel Info (显示内核信息)
         if: inputs.extract_kernel_info == true && steps.kernel_info.outputs.found == 'true'
         run: |
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -368,7 +355,7 @@ jobs:
           echo "| **Build Time** | \`${{ steps.kernel_info.outputs.kernel_time }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Full String** | \`${{ steps.kernel_info.outputs.full_string }}\` |" >> $GITHUB_STEP_SUMMARY
       
-      - name: Check output
+      - name: 📝 Check output (检查结果)
         run: |
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 提取结果" >> $GITHUB_STEP_SUMMARY
@@ -384,7 +371,7 @@ jobs:
             fi
           done
       
-      - name: Upload results
+      - name: 📤 Upload results (上传提取结果)
         uses: actions/upload-artifact@v4
         with:
           name: extracted-${{ inputs.device }}-${{ inputs.region }}-${{ steps.get_ota.outputs.version }}
