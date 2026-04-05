@@ -1,4 +1,4 @@
-name: OTA Partition Extractor
+name: OTA镜像分区提取
 
 on:
   workflow_dispatch:
