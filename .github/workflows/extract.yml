@@ -100,47 +100,35 @@ jobs:
       - name: Get OTA Download URL
         id: get_ota
         run: |
-          python3 << 'EOF'
+          python3 << 'PYEOF'
           import httpx
           import json
           import os
-          import urllib.parse
+          import re
+          from bs4 import BeautifulSoup
           
           device = "${{ inputs.device }}"
           region = "${{ inputs.region }}"
           version_index = ${{ inputs.version_index }}
           
-          # Fetch the page to get the devices JSON
           url = "https://roms.danielspringer.at/index.php?view=ota"
           resp = httpx.get(url, follow_redirects=True)
           resp.raise_for_status()
           
-          # Parse the devices JSON from the select element
-          import re
-          match = re.search(r'data-devices=\'(.+?)\'', resp.text)
-          if not match:
-              # Try with HTML entities
-              match = re.search(r'data-devices=&#x27;(.+?)&#x27;', resp.text)
+          soup = BeautifulSoup(resp.text, 'html.parser')
+          select = soup.find('select', id='device')
+          devices = json.loads(select['data-devices'])
           
-          if match:
-              devices_json = match.group(1)
-              # Decode HTML entities
-              devices_json = devices_json.replace('&quot;', '"')
-              devices = json.loads(devices_json)
-          else:
-              raise Exception("Could not find devices data")
-          
-          # Get versions for selected device and region
           if device not in devices:
-              raise Exception(f"Device '{device}' not found. Available: {list(devices.keys())}")
+              raise Exception(f"Device '{device}' not found")
           
           device_regions = devices[device]
           if region not in device_regions:
-              raise Exception(f"Region '{region}' not available for '{device}'. Available: {list(device_regions.keys())}")
+              raise Exception(f"Region '{region}' not available for '{device}'")
           
           versions = device_regions[region]
           if not versions:
-              raise Exception(f"No versions available for '{device}' in region '{region}'")
+              raise Exception(f"No versions for '{device}' in '{region}'")
           
           if version_index >= len(versions):
               raise Exception(f"Version index {version_index} out of range (0-{len(versions)-1})")
@@ -148,7 +136,7 @@ jobs:
           version = versions[version_index]
           print(f"Selected: {device} | {region} | {version}")
           
-          # POST to get the download URL
+          # POST to get download page
           post_data = {
               "device": device,
               "region": region,
@@ -158,32 +146,35 @@ jobs:
           post_resp = httpx.post(url, data=post_data, follow_redirects=True)
           post_resp.raise_for_status()
           
-          # Find the download link in the response
-          # Look for href containing download or ota
-          download_match = re.search(r'href=[\'"](https?://[^\'"]*(?:download|ota|payload)[^\'"]*)[\'"]', post_resp.text)
-          if download_match:
-              download_url = download_match.group(1)
-              print(f"Download URL: {download_url}")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f'ota_url={download_url}\n')
-                  f.write(f'version={version}\n')
-          else:
-              # Try to find any download button/link
-              # Look for anchor tags with download-related text
-              all_links = re.findall(r'href=[\'"](https?://[^\'"]+)[\'"]', post_resp.text)
-              for link in all_links:
-                  if any(kw in link.lower() for kw in ['download', 'ota', 'firmware', 'update']):
-                      print(f"Found potential URL: {link}")
-                      with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                          f.write(f'ota_url={link}\n')
-                          f.write(f'version={version}\n')
+          post_soup = BeautifulSoup(post_resp.text, 'html.parser')
+          
+          # Find download link - BeautifulSoup auto-decodes HTML entities
+          download_url = None
+          for a in post_soup.find_all('a', href=True):
+              href = a['href']  # Already decoded (&amp; → &)
+              if any(kw in href.lower() for kw in ['download', 'ota', 'firmware', 'update', '.zip']):
+                  if href.startswith('http'):
+                      download_url = href
                       break
-              else:
-                  # Save response for debugging
-                  with open('response_debug.html', 'w') as f:
-                      f.write(post_resp.text)
-                  raise Exception("Could not find download URL. Check response_debug.html")
-          EOF
+          
+          if not download_url:
+              # Try all links
+              for a in post_soup.find_all('a', href=True):
+                  href = a['href']
+                  if href.startswith('http'):
+                      download_url = href
+                      break
+          
+          if not download_url:
+              with open('response_debug.html', 'w') as f:
+                  f.write(post_resp.text)
+              raise Exception("Could not find download URL. Check response_debug.html")
+          
+          print(f"Download URL: {download_url}")
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'ota_url={download_url}\n')
+              f.write(f'version={version}\n')
+          PYEOF
       
       - name: Show OTA Info
         run: |
@@ -193,6 +184,20 @@ jobs:
           echo "- **地区**: ${{ inputs.region }}" >> $GITHUB_STEP_SUMMARY
           echo "- **版本**: ${{ steps.get_ota.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **OTA URL**: \`${{ steps.get_ota.outputs.ota_url }}\`" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Install aria2
+        run: sudo apt-get update && sudo apt-get install -y aria2
+      
+      - name: Download OTA file
+        run: |
+          echo "⬇️ 正在下载OTA文件..."
+          # Use Referer to bypass anti-hotlink protection
+          aria2c -s16 -x16 -k1M \
+            --referer="https://roms.danielspringer.at/" \
+            --header="Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
+            "${{ steps.get_ota.outputs.ota_url }}" -o ota_update.zip
+          echo "✅ 下载完成"
+          ls -lh ota_update.zip
       
       - name: Install payload-dumper
         run: pip install git+https://github.com/5ec1cff/payload-dumper
@@ -208,7 +213,7 @@ jobs:
             $PARTITIONS_ARG \
             --workers ${{ inputs.workers }} \
             --out ./output \
-            "${{ steps.get_ota.outputs.ota_url }}"
+            "./ota_update.zip"
       
       - name: Check output
         run: |
