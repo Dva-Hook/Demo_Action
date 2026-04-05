@@ -297,19 +297,20 @@ jobs:
       
       - name: 💾 Save result to file (保存结果到文件)
         run: |
-          RESULT="${{ steps.extract.outputs.result }}"
+          RESULT="${{ steps.kernel_info.outputs.result }}"
           DEVICE=$(echo "$RESULT" | cut -d'|' -f1)
           KERNEL=$(echo "$RESULT" | cut -d'|' -f2)
           TIME=$(echo "$RESULT" | cut -d'|' -f3)
           
           mkdir -p ./results
-          echo "$DEVICE|$KERNEL|$TIME" > ./results/${{ matrix.device }}.txt
+          SAFE_DEVICE=$(echo "${{ matrix.device }}" | tr ' ' '_')
+          echo "$DEVICE|$KERNEL|$TIME" > "./results/${SAFE_DEVICE}.txt"
       
       - name: 📤 Upload individual result (上传单个结果)
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-info-${{ matrix.device }}
-          path: results/${{ matrix.device }}.txt
+          name: kernel-info-$(echo "${{ matrix.device }}" | tr ' ' '_')
+          path: results/$(echo "${{ matrix.device }}" | tr ' ' '_').txt
           retention-days: 7
 
   merge-results:
@@ -351,7 +352,7 @@ jobs:
           SUMMARY_MD+=$'\n'
           SUMMARY_MD+="|----------|----------|----------|"
           
-          for file in ./all-results/kernel-info-*/${{ matrix.device }}.txt; do
+          for file in ./all-results/kernel-info-*/*.txt; do
             if [ -f "$file" ]; then
               LINE=$(cat "$file")
               DEVICE=$(echo "$LINE" | cut -d'|' -f1)
