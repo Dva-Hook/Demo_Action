@@ -294,30 +294,29 @@ jobs:
               print(f"gzip decompression failed: {e}")
           
           # Method 2: If still no success, try raw search in compressed data
-          if decompressed is None:
+          search_text = None
+          if decompressed is not None:
+              search_text = decompressed.decode('utf-8', errors='ignore')
+              print("Searching in decompressed kernel...")
+          else:
               print("Searching in raw kernel data...")
-              # Convert to string and search (may find some strings even in compressed data)
-              try:
-                  text = kernel_data.decode('utf-8', errors='ignore')
-                  match = re.search(r'Linux version [^\s]+', text)
-                  if match:
-                      print(f"Found in compressed data: {match.group()}")
-              except:
-                  pass
+              search_text = kernel_data.decode('utf-8', errors='ignore')
+              
+              # Quick check
+              match = re.search(r'Linux version [^\s]+', search_text)
+              if match:
+                  print(f"Found in raw data: {match.group()}")
           
           # Search for kernel version string
           kernel_version = None
           kernel_time = None
           full_string = None
           
-          if decompressed:
-              # Search in decompressed kernel
-              text = decompressed.decode('utf-8', errors='ignore')
-              
-              # Find "Linux version" string
+          if search_text:
+              # Find "Linux version" string - try multiple patterns
               match = re.search(
                   r'Linux version ([^\s]+)\s+\([^)]+\)\s+\([^)]+\)\s+#1\s+SMP\s+PREEMPT\s+(.+?)(?:\x00|\n|$)',
-                  text
+                  search_text
               )
               
               if match:
@@ -327,14 +326,14 @@ jobs:
                   print(f"Kernel Version: {kernel_version}")
                   print(f"Kernel Time: {kernel_time}")
               else:
-                  # Try simpler pattern
-                  match = re.search(r'Linux version ([^\s(]+)', text)
+                  # Simpler pattern: just version
+                  match = re.search(r'Linux version ([^\s(]+)', search_text)
                   if match:
                       kernel_version = match.group(1)
-                      print(f"Found version (simple): {kernel_version}")
+                      print(f"Found version: {kernel_version}")
                       
                       # Try to find timestamp separately
-                      time_match = re.search(r'#1\s+SMP\s+PREEMPT\s+(\w+\s+\w+\s+\d+\s+[\d:]+\s+\w+\s+\d{4})', text)
+                      time_match = re.search(r'#1\s+SMP\s+PREEMPT\s+(\w+\s+\w+\s+\d+\s+[\d:]+\s+\w+\s+\d{4})', search_text)
                       if time_match:
                           kernel_time = time_match.group(1)
                           print(f"Found time: {kernel_time}")
