@@ -74,6 +74,11 @@ on:
         required: false
         type: string
         default: 'boot,init_boot,vbmeta,vbmeta_system'
+      extract_kernel_info:
+        description: '是否提取内核构建时间和名称'
+        required: false
+        type: boolean
+        default: true
       workers:
         description: '并行工作线程数'
         required: false
@@ -200,6 +205,164 @@ jobs:
             --workers ${{ inputs.workers }} \
             --out ./output \
             "${{ steps.get_ota.outputs.ota_url }}"
+      
+      - name: Extract Kernel Info
+        if: inputs.extract_kernel_info == true
+        id: kernel_info
+        run: |
+          BOOT_IMG="output/boot.img"
+          
+          if [ ! -f "$BOOT_IMG" ]; then
+            echo "::warning::boot.img not found, skipping kernel info extraction"
+            echo "found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "found=true" >> $GITHUB_OUTPUT
+          
+          python3 << 'PYEOF'
+          import struct
+          import gzip
+          import re
+          import os
+          import io
+          
+          boot_img_path = "./output/boot.img"
+          
+          with open(boot_img_path, 'rb') as f:
+              boot_data = f.read()
+          
+          # Parse boot.img header to find kernel offset and size
+          # Check boot.img version
+          magic = boot_data[:8]
+          
+          kernel_offset = 0
+          kernel_size = 0
+          page_size = 2048  # default
+          
+          if magic == b'ANDROID!':
+              # boot.img v0-v2
+              version = struct.unpack('<I', boot_data[16:20])[0]
+              kernel_size = struct.unpack('<I', boot_data[8:12])[0]
+              
+              if version <= 2:
+                  page_size = struct.unpack('<I', boot_data[36:40])[0]
+                  kernel_offset = page_size  # kernel starts after header (1 page)
+              elif version == 3:
+                  # v3: header is 1580 bytes, kernel starts at 1580
+                  kernel_offset = 1580
+              elif version == 4:
+                  # v4: header is 1580 bytes + boot_header size
+                  kernel_offset = 1580
+              else:
+                  kernel_offset = page_size
+                  
+              print(f"boot.img version: {version}")
+              print(f"page_size: {page_size}")
+              print(f"kernel_offset: {kernel_offset}")
+              print(f"kernel_size: {kernel_size}")
+          else:
+              # Unknown format, try to find gzip kernel
+              print("Unknown boot.img format, searching for gzipped kernel...")
+              gz_pos = boot_data.find(b'\x1f\x8b')
+              if gz_pos >= 0:
+                  kernel_offset = gz_pos
+                  print(f"Found gzip magic at offset: {hex(gz_pos)}")
+              else:
+                  print("No gzip magic found, trying offset 0")
+                  kernel_offset = 0
+          
+          # Extract kernel data
+          if kernel_size > 0:
+              kernel_data = boot_data[kernel_offset:kernel_offset + kernel_size]
+          else:
+              kernel_data = boot_data[kernel_offset:]
+          
+          # Try to decompress
+          decompressed = None
+          
+          # Method 1: gzip
+          try:
+              # Find gzip magic in kernel_data
+              gz_start = kernel_data.find(b'\x1f\x8b')
+              if gz_start >= 0:
+                  gz_data = kernel_data[gz_start:]
+                  with gzip.GzipFile(fileobj=io.BytesIO(gz_data)) as gz:
+                      decompressed = gz.read()
+                  print("Successfully decompressed with gzip")
+          except Exception as e:
+              print(f"gzip decompression failed: {e}")
+          
+          # Method 2: If still no success, try raw search in compressed data
+          if decompressed is None:
+              print("Searching in raw kernel data...")
+              # Convert to string and search (may find some strings even in compressed data)
+              try:
+                  text = kernel_data.decode('utf-8', errors='ignore')
+                  match = re.search(r'Linux version [^\s]+', text)
+                  if match:
+                      print(f"Found in compressed data: {match.group()}")
+              except:
+                  pass
+          
+          # Search for kernel version string
+          kernel_version = None
+          kernel_time = None
+          full_string = None
+          
+          if decompressed:
+              # Search in decompressed kernel
+              text = decompressed.decode('utf-8', errors='ignore')
+              
+              # Find "Linux version" string
+              match = re.search(
+                  r'Linux version ([^\s]+)\s+\([^)]+\)\s+\([^)]+\)\s+#1\s+SMP\s+PREEMPT\s+(.+?)(?:\x00|\n|$)',
+                  text
+              )
+              
+              if match:
+                  kernel_version = match.group(1)
+                  kernel_time = match.group(2).strip()
+                  full_string = f"Linux version {kernel_version} ... #1 SMP PREEMPT {kernel_time}"
+                  print(f"Kernel Version: {kernel_version}")
+                  print(f"Kernel Time: {kernel_time}")
+              else:
+                  # Try simpler pattern
+                  match = re.search(r'Linux version ([^\s(]+)', text)
+                  if match:
+                      kernel_version = match.group(1)
+                      print(f"Found version (simple): {kernel_version}")
+                      
+                      # Try to find timestamp separately
+                      time_match = re.search(r'#1\s+SMP\s+PREEMPT\s+(\w+\s+\w+\s+\d+\s+[\d:]+\s+\w+\s+\d{4})', text)
+                      if time_match:
+                          kernel_time = time_match.group(1)
+                          print(f"Found time: {kernel_time}")
+          
+          if kernel_version:
+              # Write to GITHUB_OUTPUT
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f'kernel_version={kernel_version}\n')
+                  f.write(f'kernel_time={kernel_time or "Unknown"}\n')
+                  f.write(f'full_string={full_string or kernel_version}\n')
+              print("\n✅ Extraction successful!")
+          else:
+              print("\n❌ Could not extract kernel info")
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write('found=false\n')
+          PYEOF
+      
+      - name: Show Kernel Info
+        if: inputs.extract_kernel_info == true && steps.kernel_info.outputs.found == 'true'
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔧 内核信息" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 项目 | 值 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Kernel Version** | \`${{ steps.kernel_info.outputs.kernel_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Time** | \`${{ steps.kernel_info.outputs.kernel_time }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Full String** | \`${{ steps.kernel_info.outputs.full_string }}\` |" >> $GITHUB_STEP_SUMMARY
       
       - name: Check output
         run: |
