@@ -185,20 +185,6 @@ jobs:
           echo "- **版本**: ${{ steps.get_ota.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **OTA URL**: \`${{ steps.get_ota.outputs.ota_url }}\`" >> $GITHUB_STEP_SUMMARY
       
-      - name: Install aria2
-        run: sudo apt-get update && sudo apt-get install -y aria2
-      
-      - name: Download OTA file
-        run: |
-          echo "⬇️ 正在下载OTA文件..."
-          # Use Referer to bypass anti-hotlink protection
-          aria2c -s16 -x16 -k1M \
-            --referer="https://roms.danielspringer.at/" \
-            --header="Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
-            "${{ steps.get_ota.outputs.ota_url }}" -o ota_update.zip
-          echo "✅ 下载完成"
-          ls -lh ota_update.zip
-      
       - name: Install payload-dumper
         run: pip install git+https://github.com/5ec1cff/payload-dumper
       
@@ -213,7 +199,7 @@ jobs:
             $PARTITIONS_ARG \
             --workers ${{ inputs.workers }} \
             --out ./output \
-            "./ota_update.zip"
+            "${{ steps.get_ota.outputs.ota_url }}"
       
       - name: Check output
         run: |
