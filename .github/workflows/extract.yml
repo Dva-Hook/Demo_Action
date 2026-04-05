@@ -1,0 +1,72 @@
+name: Payload Dumper
+
+on:
+  workflow_dispatch:
+    inputs:
+      ota_url:
+        description: 'OTA 更新包 URL (ZIP 或 payload.bin 直链)'
+        required: true
+        type: string
+      partitions:
+        description: '要提取的分区 (逗号分隔，留空提取全部)'
+        required: false
+        type: string
+        default: ''
+      workers:
+        description: '并行工作线程数'
+        required: false
+        type: number
+        default: 4
+
+jobs:
+  extract:
+    name: Extract Partitions
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install payload-dumper
+        run: pip install .
+      
+      - name: Extract partitions
+        run: |
+          PARTITIONS_ARG=""
+          if [ -n "${{ inputs.partitions }}" ]; then
+            PARTITIONS_ARG="--partitions ${{ inputs.partitions }}"
+          fi
+          
+          payload_dumper \
+            $PARTITIONS_ARG \
+            --workers ${{ inputs.workers }} \
+            --out ./output \
+            "${{ inputs.ota_url }}"
+      
+      - name: Check output
+        run: |
+          echo "### 提取结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 文件名 | 大小 |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+          
+          for f in output/*.img; do
+            if [ -f "$f" ]; then
+              SIZE=$(du -h "$f" | cut -f1)
+              NAME=$(basename "$f")
+              echo "| $NAME | $SIZE |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+      
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: extracted-partitions
+          path: output/*.img
+          retention-days: 7
+          if-no-files-found: error
