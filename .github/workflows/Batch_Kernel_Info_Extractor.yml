@@ -296,6 +296,7 @@ jobs:
           PYEOF
       
       - name: 💾 Save result to file (保存结果到文件)
+        id: save_result
         run: |
           RESULT="${{ steps.kernel_info.outputs.result }}"
           DEVICE=$(echo "$RESULT" | cut -d'|' -f1)
@@ -305,12 +306,13 @@ jobs:
           mkdir -p ./results
           SAFE_DEVICE=$(echo "${{ matrix.device }}" | tr ' ' '_')
           echo "$DEVICE|$KERNEL|$TIME" > "./results/${SAFE_DEVICE}.txt"
+          echo "safe_device=${SAFE_DEVICE}" >> $GITHUB_OUTPUT
       
       - name: 📤 Upload individual result (上传单个结果)
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-info-$(echo "${{ matrix.device }}" | tr ' ' '_')
-          path: results/$(echo "${{ matrix.device }}" | tr ' ' '_').txt
+          name: kernel-info-${{ steps.save_result.outputs.safe_device }}
+          path: results/${{ steps.save_result.outputs.safe_device }}.txt
           retention-days: 7
 
   merge-results:
