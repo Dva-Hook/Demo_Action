@@ -103,6 +103,7 @@ jobs:
         run: pip install httpx beautifulsoup4
       
       - name: 🔗 Get OTA Download URL (获取OTA下载链接)
+        id: get_ota
         run: |
           python3 << 'PYEOF'
           import httpx
@@ -191,18 +192,22 @@ jobs:
       
       - name: 📂 Extract partitions (提取分区镜像)
         run: |
+          OTA_URL="${{ steps.get_ota.outputs.ota_url }}"
+          if [ -z "$OTA_URL" ]; then
+            echo "::error::OTA URL is empty, cannot proceed"
+            exit 1
+          fi
+
           PARTITIONS_ARG=""
           if [ -n "${{ inputs.partitions }}" ]; then
             PARTITIONS_ARG="--partitions ${{ inputs.partitions }}"
           fi
-          
+
           payload_dumper \
             $PARTITIONS_ARG \
             --workers ${{ inputs.workers }} \
             --out ./output \
-            "${{ steps.get_ota.outputs.ota_url }}"
-      
-      - name: 🔍 Extract Kernel Info (提取内核信息)
+            "$OTA_URL"
         run: |
           BOOT_IMG="output/boot.img"
           
