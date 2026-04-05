@@ -33,9 +33,10 @@ jobs:
           python-version: '3.12'
       
       - name: Install payload-dumper
-        run: pip install .
+        run: pip install ./payload-dumper
       
       - name: Extract partitions
+        working-directory: payload-dumper
         run: |
           PARTITIONS_ARG=""
           if [ -n "${{ inputs.partitions }}" ]; then
