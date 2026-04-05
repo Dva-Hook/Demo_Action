@@ -13,8 +13,7 @@ on:
           - Build_oneplus_sm8750
           - Build_Lenovo_sm8750
           - Build_test_sm8750
-          - Build_oneplus_sm8650
-          - 'Build_OOR_Mi_sm8850'
+          - OTA Partition Extractor
           - Encrypt_script
           - export-ccache
       count:
