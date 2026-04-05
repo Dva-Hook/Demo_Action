@@ -73,7 +73,7 @@ on:
         description: '要提取的分区 (逗号分隔，如 boot,dtbo,vendor_boot，留空提取全部)'
         required: false
         type: string
-        default: 'boot,init_boot,vbmeta,vbmeta_system'
+        default: 'boot,init_boot,vendor_boot,vbmeta'
       extract_kernel_info:
         description: '是否提取内核构建时间和名称'
         required: false
