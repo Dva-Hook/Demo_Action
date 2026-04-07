@@ -946,7 +946,7 @@ index 0000000000000..a1b2c3d4e5f67
 +
 +// Insert a request into the scheduler (after Read & Write models stabilized)
 +static void insert_request_post_stability(struct blk_mq_hw_ctx *hctx,
-+		struct request *rq, blk_insert_t insert_flags, struct list_head *free) {
++		struct request *rq, bool at_head, struct list_head *free) {
 +	struct request_queue *q = hctx->queue;
 +	struct adios_data *ad = q->elevator->elevator_data;
 +	struct adios_rq_data *rd = get_rq_data(rq);
@@ -958,8 +958,8 @@ index 0000000000000..a1b2c3d4e5f67
 +	rd->pred_lat =
 +		latency_model_predict(&ad->latency_model[optype], rd->block_size);
 +
-+	/* Tier-0: BLK_MQ_INSERT_AT_HEAD Requests */
-+	if (insert_flags & BLK_MQ_INSERT_AT_HEAD) {
++	/* Tier-0: AT_HEAD Requests */
++	if (at_head) {
 +		insert_to_prio_queue(ad, rq, 0);
 +		return;
 +	}
@@ -988,11 +988,11 @@ index 0000000000000..a1b2c3d4e5f67
 +
 +// Insert a request into the scheduler (before Read & Write models stabilizes)
 +static void insert_request_pre_stability(struct blk_mq_hw_ctx *hctx,
-+		struct request *rq, blk_insert_t insert_flags, struct list_head *free) {
++		struct request *rq, bool at_head, struct list_head *free) {
 +	struct adios_data *ad = hctx->queue->elevator->elevator_data;
 +	struct adios_rq_data *rd = get_rq_data(rq);
 +	u8 optype = adios_optype(rq);
-+	u8 pq_idx = !(insert_flags & BLK_MQ_INSERT_AT_HEAD);
++	u8 pq_idx = !at_head;
 +	bool stable = false;
 +
 +	rd->managed = true;
@@ -1015,7 +1015,7 @@ index 0000000000000..a1b2c3d4e5f67
 +// Insert multiple requests into the scheduler
 +static void adios_insert_requests(struct blk_mq_hw_ctx *hctx,
 +				   struct list_head *list,
-+				   blk_insert_t insert_flags) {
++				   bool at_head) {
 +	struct request_queue *q = hctx->queue;
 +	struct adios_data *ad = q->elevator->elevator_data;
 +	struct request *rq;
@@ -1033,9 +1033,9 @@ index 0000000000000..a1b2c3d4e5f67
 +			rq = list_first_entry(list, struct request, queuelist);
 +			list_del_init(&rq->queuelist);
 +			if (likely(ad->models_stable))
-+				insert_request_post_stability(hctx, rq, insert_flags, &free);
++				insert_request_post_stability(hctx, rq, at_head, &free);
 +			else
-+				insert_request_pre_stability(hctx, rq, insert_flags, &free);
++				insert_request_pre_stability(hctx, rq, at_head, &free);
 +		}
 +		spin_unlock_irqrestore(&ad->lock, flags);
 +	} while (!stop);
