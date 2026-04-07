@@ -51,11 +51,6 @@ jobs:
       DEVICES_NAME:           ${{ github.event.inputs.device_name }}
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
-      ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
-      ENABLE_ADIOS:           ${{ github.event.inputs.enable_Adios }}
-      ENABLE_SCX:             ${{ github.event.inputs.enable_scx }}
-      ENABLE_BBG:             ${{ github.event.inputs.enable_bbg }}
-      ENABLE_SERIALID_CHECK:  ${{ github.event.inputs.enable_serialid_check }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
     steps:
       - uses: actions/checkout@v5
@@ -63,8 +58,8 @@ jobs:
           fetch-depth: 0
       - name: ⚙️ Set REPO_MANIFEST (设置对应机型配置文件)
         run: |
-          
           if [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
+          case "${{ env.DEVICES_NAME }}" in
            oneplus_ace5)
                 DEFAULT_SUFFIX='-android15-8-g7e1f3c083cc6-abogki467167594-4k'
               ;;
