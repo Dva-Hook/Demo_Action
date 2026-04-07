@@ -332,6 +332,32 @@ jobs:
           patch -p1 -N -F 3 < 69_hide_stuff.patch || true
           echo "[OK] SUSFS 补丁处理流程全部完成"
 
+      - name: 🔧 Complete linked files (补齐关联文件)
+        run: |
+          cd kernel_workspace/common
+          echo "开始添加关联文件..."
+          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/complete_file.patch"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "::error::未找到 关联补丁文件"
+            exit 1
+          fi
+          if [ -f "block/adios.c" ]; then
+            echo "✓ 关联文件已存在，跳过应用补丁"
+          else
+            cp "$PATCH_FILE" ./complete_file.patch
+            echo "正在应用 关联文件补丁..."
+            if patch -p1 --ignore-whitespace -F 3 < complete_file.patch 2>&1 | tee /tmp/adios_patch.log; then
+              echo "✓ 关联文件补丁应用成功"
+            else
+              echo "::warning::关联文件 补丁应用出现问题"
+              if grep -q "malformed patch" /tmp/adios_patch.log; then
+                patch -p1 --force --ignore-whitespace < complete_file.patch || true
+              fi
+            fi
+            rm -f complete_file.patch
+          fi
+          echo "✓ 关联文件补齐完成"
+
 
 
           
