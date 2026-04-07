@@ -2080,15 +2080,26 @@ diff --git a/block/elevator.c b/block/elevator.c
 index 5ff093cb3cf8f..1cbc62507c187 100644
 --- a/block/elevator.c
 +++ b/block/elevator.c
-@@ -556,7 +556,11 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
+@@ -556,7 +556,19 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
  {
 +#ifdef CONFIG_MQ_IOSCHED_DEFAULT_ADIOS
-+	return elevator_find_get(q, "adios");
-+#else
++	struct elevator_type *e;
++
++	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
++		return NULL;
++
++	e = elevator_get(q, "adios", false);
++	if (e)
++		return e;
++#endif
++
+ 	if (q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
+ 		return NULL;
+ 
  	if (q->nr_hw_queues != 1 &&
  	    !blk_mq_is_shared_tags(q->tag_set->flags))
  		return NULL;
  
- 	return elevator_find_get(q, "mq-deadline");
-+#endif
+-	return elevator_find_get(q, "mq-deadline");
++	return elevator_get(q, "mq-deadline", false);
  }
