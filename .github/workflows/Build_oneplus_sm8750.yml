@@ -182,10 +182,10 @@ jobs:
                   KERNEL_TIME='Tue Oct 28 09:04:21 UTC 2025'
                 ;;
               oneplus_ace5_ultra)
-                  KERNEL_TIME='Tue Jul  1 19:48:18 UTC 2025'
+                  KERNEL_TIME='Tue Jul 1 19:48:18 UTC 2025'
                 ;;
               oneplus_13 | oneplus_13t | oneplus_ace5_pro | oneplus_ace_6 | realme_GT7 | realme_GT7pro_Speed | realme_GT8)
-                  KERNEL_TIME='Mon Dec  8 04:00:43 UTC 2025'
+                  KERNEL_TIME='Mon Dec 8 04:00:43 UTC 2025'
                 ;;
               realme_GT7pro)
                   KERNEL_TIME='Fri Sep 19 06:13:40 UTC 2025'
