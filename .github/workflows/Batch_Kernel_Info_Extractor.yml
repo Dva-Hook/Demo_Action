@@ -16,9 +16,12 @@ jobs:
     strategy:
       matrix:
         device:
+          - "OP 12"
           - "OP 13"
+          - "OP 13R"
           - "OP 13T"
           - "OP ACE 6"
+          - "OP ACE 5"
           - "OP ACE 5 PRO"
           - "OP ACE 5 ULTRA"
           - "OP PAD2 PRO"

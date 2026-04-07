@@ -68,17 +68,12 @@ jobs:
           if [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
           case "${{ env.DEVICES_NAME }}" in
            oneplus_ace5)
-                DEFAULT_SUFFIX='-android15-8-g7e1f3c083cc6-abogki467167594-4k'
+                DEFAULT_SUFFIX='android14-11-o-gca13bffobf09'
               ;;
           esac
             echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
             echo "使用原官核名称：$DEFAULT_SUFFIX"
           else
-              # 验证用户输入是否以 - 开头
-              if [[ "${{ github.event.inputs.custom_kernel_suffix }}" != -* ]]; then
-                echo "::warning::自定义内核名称请以 - 开头"
-                echo "示例：-android15-8-g096cdb6ecefc-ab14358676-4k"
-              fi
             echo "使用自定义名称: ${{ github.event.inputs.custom_kernel_suffix }}"
             echo "DEFAULT_SUFFIX=${{ github.event.inputs.custom_kernel_suffix }}" >> $GITHUB_ENV
           fi
@@ -418,8 +413,9 @@ jobs:
           cd kernel_workspace
           echo "内核后缀: $DEFAULT_SUFFIX"
           ESCAPED_SUFFIX=$(printf '%s\n' "$DEFAULT_SUFFIX" | sed 's:[\/&]:\\&:g')
-          sudo sed -i "s/-4k/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
-          sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
+          for f in ./common/scripts/setlocalversion; do
+            sed -i "\$s|echo \"\\\$res\"|echo \"-${{ env.DEFAULT_SUFFIX }}\"|" "$f"
+          done
           
       - name: 📥 Start build timer (构建计时开始)
         run: 
@@ -610,7 +606,7 @@ jobs:
         env:
           ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
           DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
-          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
         run: |
           set -euo pipefail
           echo "正在下载 Re-Kernel 模块: $ASSET_NAME"
@@ -628,5 +624,5 @@ jobs:
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         uses: actions/upload-artifact@v5
         with:
-          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
-          path: kernel_workspace/Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
+          path: kernel_workspace/Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1

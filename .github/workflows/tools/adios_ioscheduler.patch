@@ -37,10 +37,10 @@ index 46ada9dc8bbfe..2fd10afbaaeb9 100644
  
 diff --git a/block/adios.c b/block/adios.c
 new file mode 100644
-index 0000000000000..803691d5d29b7
+index 0000000000000..a1b2c3d4e5f67
 --- /dev/null
 +++ b/block/adios.c
-@@ -0,0 +1,2020 @@
+@@ -0,0 +1,2018 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * Adaptive Deadline I/O Scheduler (ADIOS)
@@ -68,7 +68,7 @@ index 0000000000000..803691d5d29b7
 +#include "blk-mq.h"
 +#include "blk-mq-sched.h"
 +
-+#define ADIOS_VERSION "3.1.6"
++#define ADIOS_VERSION "3.1.9"
 +
 +/* Request Types:
 + *
@@ -276,8 +276,7 @@ index 0000000000000..803691d5d29b7
 +	atomic_t state;
 +	u8  bq_state[ADIOS_BQ_PAGES];
 +
-+	void (*insert_request_fn)(struct blk_mq_hw_ctx *, struct request *,
-+								blk_insert_t, struct list_head *);
++	bool models_stable;
 +
 +	u64 global_latency_window;
 +	u64 compliance_flags;
@@ -992,7 +991,7 @@ index 0000000000000..803691d5d29b7
 +	struct adios_rq_data *rd = get_rq_data(rq);
 +	u8 optype = adios_optype(rq);
 +	u8 pq_idx = !(insert_flags & BLK_MQ_INSERT_AT_HEAD);
-+	bool models_stable = false;
++	bool stable = false;
 +
 +	rd->managed = true;
 +	rd->block_size = blk_rq_bytes(rq);
@@ -1004,11 +1003,11 @@ index 0000000000000..803691d5d29b7
 +	rcu_read_lock();
 +	if (rcu_dereference(ad->latency_model[ADIOS_READ].params)->base > 0 &&
 +		rcu_dereference(ad->latency_model[ADIOS_WRITE].params)->base > 0)
-+			models_stable = true;
++			stable = true;
 +	rcu_read_unlock();
 +
-+	if (models_stable)
-+		ad->insert_request_fn = insert_request_post_stability;
++	if (stable)
++		ad->models_stable = true;
 +}
 +
 +// Insert multiple requests into the scheduler
@@ -1030,7 +1029,10 @@ index 0000000000000..803691d5d29b7
 +		}
 +		rq = list_first_entry(list, struct request, queuelist);
 +		list_del_init(&rq->queuelist);
-+		ad->insert_request_fn(hctx, rq, insert_flags, &free);
++		if (likely(ad->models_stable))
++			insert_request_post_stability(hctx, rq, insert_flags, &free);
++		else
++			insert_request_pre_stability(hctx, rq, insert_flags, &free);
 +	}} while (!stop);
 +
 +	blk_mq_free_requests(&free);
@@ -1365,7 +1367,7 @@ index 0000000000000..803691d5d29b7
 +
 +	if (!list_empty(&local_list)) {
 +		struct request *trq, *next;
-+		LIST_HEAD(free_list);
++	LIST_HEAD(free_list);
 +
 +		/* ad->lock is already held */
 +		list_for_each_entry_safe(trq, next, &local_list, queuelist) {
@@ -1401,15 +1403,11 @@ index 0000000000000..803691d5d29b7
 +	 * due to a REQ_OP_FLUSH barrier.
 +	 */
 +	if (eval_adios_state(ad, ADIOS_STATE_BP)) {
-+		union adios_in_flight_rqs ifr;
-+		ifr.scalar = atomic64_read(&ad->in_flight_rqs.atomic);
-+		if (!ifr.count) {
-+			bool barrier_released = false;
-+			scoped_guard(spinlock_irqsave, &ad->lock)
-+				barrier_released = release_barrier_requests(ad);
-+			if (barrier_released)
-+				goto retry;
-+		}
++		bool barrier_released = false;
++		scoped_guard(spinlock_irqsave, &ad->lock)
++			barrier_released = release_barrier_requests(ad);
++		if (barrier_released)
++			goto retry;
 +	}
 +
 +	return NULL;
@@ -1593,7 +1591,7 @@ index 0000000000000..803691d5d29b7
 +
 +	eq->elevator_data = ad;
 +
-+	ad->is_rotational = !blk_queue_nonrot(q);
++	ad->is_rotational = !!(q->limits.features & BLK_FEAT_ROTATIONAL);
 +	ad->global_latency_window = (ad->is_rotational)?
 +		default_global_latency_window_rotational:
 +		default_global_latency_window;
@@ -1602,7 +1600,7 @@ index 0000000000000..803691d5d29b7
 +	ad->batch_order = default_batch_order;
 +	ad->compliance_flags = default_compliance_flags;
 +
-+	ad->insert_request_fn = insert_request_pre_stability;
++	ad->models_stable = false;
 +
 +	atomic_set(&ad->state, 0);
 +
@@ -1945,7 +1943,7 @@ index 0000000000000..803691d5d29b7
 +	ret = kstrtoul(page, 10, &val); \
 +	if (ret || val < min_value || val > max_value) \
 +		return -EINVAL; \
-+	for (u8 i = 0; i < ADIOS_OPTYPES; i++) { \
++	for (u8 i = 0; i < ADIOS_OPTYPES; i++) {
 +		struct latency_model *model = &ad->latency_model[i]; \
 +		unsigned long flags; \
 +		spin_lock_irqsave(&model->update_lock, flags); \
@@ -2061,7 +2059,6 @@ index 0000000000000..803691d5d29b7
 +MODULE_AUTHOR(ADIOS_AUTHOR);
 +MODULE_LICENSE("GPL");
 +MODULE_DESCRIPTION(ADIOS_PROGNAME);
-\ No newline at end of file
 diff --git a/block/elevator.c b/block/elevator.c
 index 5ff093cb3cf8f..1cbc62507c187 100644
 --- a/block/elevator.c
