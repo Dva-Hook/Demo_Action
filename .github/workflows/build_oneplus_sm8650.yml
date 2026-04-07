@@ -229,7 +229,7 @@ jobs:
             const repoName = process.env.PUBLIC_CACHE_REPO || 'showdo/Public_Ccache';
             const releaseTag = process.env.PUBLIC_CACHE_TAG || 'exported-ccaches';
             const [owner, repo] = repoName.split('/');
-            const deviceName = process.env.DEVICE_NAME;
+            const deviceName = process.env.KERNEL_VERSION;
             let selected = null;
 
             const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
