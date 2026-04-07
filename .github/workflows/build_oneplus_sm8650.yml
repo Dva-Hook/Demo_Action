@@ -101,14 +101,15 @@ jobs:
           sudo apt update &&
           sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
           echo "正在克隆Common源码仓库..."
-          aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/sm8650_b_16.0.0_ace_5.zip -o common.zip
-          unzip -q common.zip && 
+          aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/sm8650_b_16.0.0_ace_5.tar.gz -o common.tar.gz
+          tar xzf common.tar.gz && 
           mv "android_kernel_common_oneplus_sm8650-oneplus-sm8650_b_16.0.0_ace_5" common
-          rm -rf common.zip 
-          cd ..
-          aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8650/archive/refs/heads//oneplus/sm8650_b_16.0.0_ace_5.zip -o kernel_vendor.zip
-          unzip -q kernel_vendor.zip
+          rm -rf common.tar.gz 
+          echo "正在克隆Vendor源码仓库..."
+          aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8650/archive/refs/heads/oneplus/sm8650_b_16.0.0_ace_5.tar.gz -o kernel_vendor.tar.gz
+          tar xzf kernel_vendor.tar.gz
           mv "android_kernel_modules_and_devicetree_oneplus_sm8650-oneplus-sm8650_b_16.0.0_ace_5/vendor" "./kernel_workspace/vendor"
+          rm -rf kernel_vendor.tar.gz "android_kernel_modules_and_devicetree_oneplus_sm8650-oneplus-sm8650_b_16.0.0_ace_5"
           cd kernel_workspace
           echo "正在克隆llvm-clang18工具链..."
           mkdir -p clang18 &&
@@ -127,6 +128,16 @@ jobs:
             sed -i 's/ -dirty//g' "$f"
             sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
           done
+          # 验证符号链接是否正常（git clone 原生保留符号链接）
+          echo "验证关键符号链接..."
+          ls -la common/kernel/oplus_cpu
+          ls -la common/drivers/soc/oplus/oplus_resctrl
+          ls -la common/drivers/soc/oplus/storage
+          ls -la common/kernel/locking/locking_main.h
+          ls -la common/kernel/locking/oplus_locking.c
+          ls -la common/kernel/locking/sa_common_struct.h
+          echo "验证vendor目录结构..."
+          ls -la vendor/oplus/kernel/
 
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
