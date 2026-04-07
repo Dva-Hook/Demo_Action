@@ -13,6 +13,7 @@ on:
           - "Build_oneplus_sm8750"
           - "Build_Lenovo_sm8750"
           - "Build_test_sm8750"
+          - "Build_oneplus_sm8650"
           - "OTA镜像分区提取"
           - "Encrypt_script"
           - "export-ccache"
