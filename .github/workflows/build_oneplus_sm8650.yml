@@ -338,41 +338,14 @@ jobs:
           echo "开始添加关联文件..."
           PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/complete_file.patch"
           if [ ! -f "$PATCH_FILE" ]; then
-            echo "::error::未找到 关联补丁文件"
+            echo "::error::未找到关联补丁文件"
             exit 1
           fi
-          # 仅在关键文件缺失时才尝试应用补丁
-          if [ ! -f "kernel/oplus_cpu/sched/Kconfig" ]; then
-            cp "$PATCH_FILE" ./complete_file.patch
-            echo "正在应用 关联文件补丁..."
-            patch -p1 --no-backup-if-mismatch --ignore-whitespace -F 3 < complete_file.patch 2>&1 | tee /tmp/complete_patch.log || true
-            rm -f complete_file.patch
-          else
-            echo "✓ 关键关联文件已存在，跳过应用补丁"
-          fi
-          # 回退机制：确保关键文件一定存在
-          if [ ! -f "kernel/oplus_cpu/sched/Kconfig" ]; then
-            echo "::warning::补丁未能创建关键文件，手动创建空 Kconfig 作为回退"
-            # 如果 kernel/oplus_cpu 是失效符号链接，先删除
-            if [ -L "kernel/oplus_cpu" ] && [ ! -e "kernel/oplus_cpu" ]; then
-              rm -f "kernel/oplus_cpu"
-              mkdir -p "kernel/oplus_cpu"
-            fi
-            mkdir -p "kernel/oplus_cpu/sched"
-            echo '# 空 Kconfig 文件（补丁应用失败时的回退）' > kernel/oplus_cpu/sched/Kconfig
-            echo 'config SCHED_OPLUS' >> kernel/oplus_cpu/sched/Kconfig
-            echo '    bool "OPlus scheduler support"' >> kernel/oplus_cpu/sched/Kconfig
-            echo '    default y' >> kernel/oplus_cpu/sched/Kconfig
-            echo "✓ 已创建回退 Kconfig 文件"
-          fi
-          # 确保父级 Kconfig 和 Makefile 存在
-          for f in kernel/oplus_cpu/Kconfig kernel/oplus_cpu/Makefile; do
-            if [ ! -f "$f" ]; then
-              echo "::warning::手动创建缺失的关键文件: $f"
-              mkdir -p "$(dirname "$f")"
-              touch "$f"
-            fi
-          done
+          cp "$PATCH_FILE" ./complete_file.patch
+          echo "正在应用关联文件补丁..."
+          patch -p1 --no-backup-if-mismatch --ignore-whitespace -F 3 < complete_file.patch 2>&1 | tee /tmp/complete_patch.log
+          rm -f complete_file.patch
+          echo "✓ 关联文件补丁应用完成"
           echo "✓ 关联文件补齐完成"
 
 
