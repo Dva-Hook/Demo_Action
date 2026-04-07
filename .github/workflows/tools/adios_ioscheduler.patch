@@ -1591,7 +1591,7 @@ index 0000000000000..a1b2c3d4e5f67
 +
 +	eq->elevator_data = ad;
 +
-+	ad->is_rotational = !!(q->limits.features & BLK_FEAT_ROTATIONAL);
++	ad->is_rotational = !blk_queue_nonrot(q);
 +	ad->global_latency_window = (ad->is_rotational)?
 +		default_global_latency_window_rotational:
 +		default_global_latency_window;
@@ -1943,7 +1943,7 @@ index 0000000000000..a1b2c3d4e5f67
 +	ret = kstrtoul(page, 10, &val); \
 +	if (ret || val < min_value || val > max_value) \
 +		return -EINVAL; \
-+	for (u8 i = 0; i < ADIOS_OPTYPES; i++) {
++	for (u8 i = 0; i < ADIOS_OPTYPES; i++) { \
 +		struct latency_model *model = &ad->latency_model[i]; \
 +		unsigned long flags; \
 +		spin_lock_irqsave(&model->update_lock, flags); \
