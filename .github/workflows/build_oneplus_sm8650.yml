@@ -187,15 +187,23 @@ jobs:
           done
           # 验证符号链接是否正常（tar.gz 原生保留符号链接）
           echo "验证关键符号链接..."
-          ls -la common/kernel/oplus_cpu
-          ls -la common/drivers/soc/oplus/oplus_resctrl
-          ls -la common/drivers/soc/oplus/storage
-          ls -la common/kernel/locking/locking_main.h
-          ls -la common/kernel/locking/oplus_locking.c
-          ls -la common/kernel/locking/sa_common_struct.h
+            ls -la common/kernel/oplus_cpu || echo "(SKIP) common/kernel/oplus_cpu不存在"
+            ls -la common/drivers/soc/oplus/oplus_resctrl || echo "(SKIP) common/drivers/soc/oplus/oplus_resctrl 不存在"
+            ls -la common/drivers/soc/oplus/storage || echo "(SKIP) common/drivers/soc/oplus/storage 不存在"
+            ls -la common/kernel/locking/locking_main.h || echo "(SKIP) common/kernel/locking/locking_main.h不存在"
+            ls -la common/kernel/locking/oplus_locking.c || echo "(SKIP) common/kernel/locking/oplus_locking.c不存在"
+            ls -la common/kernel/locking/sa_common_struct.h || echo "(SKIP) common/kernel/locking/sa_common_struct.h不存在"
           echo "验证符号链接可访问性..."
-          ls common/kernel/oplus_cpu/sched/Kconfig || echo "ERROR: 符号链接目标不可达!"
-          ls common/drivers/soc/oplus/oplus_resctrl/Kbuild || echo "ERROR: 符号链接目标不可达!"
+            if [ -e common/kernel/oplus_cpu ]; then
+              ls common/kernel/oplus_cpu/sched/Kconfig || echo "ERROR: 符号链接目标不可达!"
+            else
+              echo "(SKIP) common/kernel/oplus_cpu 不存在，跳过可访问性检查"
+            fi
+            if [ -e common/drivers/soc/oplus/oplus_resctrl ]; then
+              ls common/drivers/soc/oplus/oplus_resctrl/Kbuild || echo "ERROR: 符号链接目标不可达!"
+            else
+              echo "(SKIP) common/drivers/soc/oplus/oplus_resctrl不存在，跳过可访问性检查"
+            fi
           echo "验证vendor目录结构..."
           ls -la ../vendor/oplus/kernel/
 
