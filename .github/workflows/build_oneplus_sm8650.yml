@@ -143,11 +143,11 @@ jobs:
             tar xzf common.tar.gz && 
             mv "android_kernel_common_oneplus_sm8650-oneplus-${REPO_MANIFEST}" common
           elif [ "${KERNEL_VERSION}" = "6.1.115" ] || [ "${KERNEL_VERSION}" = "6.1.134" ]; then
-            aria2c -s16 -x16 -k1M aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6989/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6989/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
             tar xzf common.tar.gz && 
             mv "android_kernel_oneplus_mt6989-oneplus-${REPO_MANIFEST}" common
           elif [ "${KERNEL_VERSION}" = "6.1.128" ]; then
-            aria2c -s16 -x16 -k1M aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6897/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6897/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
             tar xzf common.tar.gz && 
             mv "android_kernel_oneplus_mt6897-oneplus-${REPO_MANIFEST}" common
           fi
@@ -395,9 +395,12 @@ jobs:
           else
             cp "$PATCH_FILE" ./adios_ioscheduler_6.1.patch
             echo "正在应用 ADIOS I/O 调度器补丁..."
+            set -o pipefail
             if patch -p1 --ignore-whitespace -F 3 < adios_ioscheduler_6.1.patch 2>&1 | tee /tmp/adios_patch.log; then
+              set +o pipefail
               echo "✓ ADIOS I/O 调度器补丁应用成功"
             else
+              set +o pipefail
               echo "::warning::ADIOS 补丁应用出现问题"
               if grep -q "malformed patch" /tmp/adios_patch.log; then
                 patch -p1 --force --ignore-whitespace < adios_ioscheduler_6.1.patch || true
