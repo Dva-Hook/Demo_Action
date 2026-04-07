@@ -117,7 +117,7 @@ jobs:
             echo "DEFAULT_SUFFIX=${{ github.event.inputs.custom_kernel_suffix }}" >> $GITHUB_ENV
           fi
           if [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
-            KERNEL_TIME='Mon Dec  8 04:00:43 UTC 2025'
+            KERNEL_TIME='Mon Dec 8 04:00:43 UTC 2025'
             echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
             echo "使用默认时间：$KERNEL_TIME"
           else
