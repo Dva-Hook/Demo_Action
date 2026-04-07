@@ -14,32 +14,44 @@ on:
           - 'SukiSU-Ultra'
         default: 'ReSukiSU'
         
-      device_name:
-        description: "📝请选择要编译的机型"
+      kernel_version:
+        description: "📝请选择要编译的内核版本"
         required: true
         type: choice
         options:
-          - 'oneplus_ace5'
-        default: 'oneplus_ace5'
+          - '6.1.57'
+          - '6.1.75'
+          - '6.1.115(天玑)'
+          - '6.1.118'
+          - '6.1.128(天玑)'
+          - '6.1.134(天玑)'
+          - '6.1.141'
+        default: '6.1.141'
 
       custom_kernel_suffix:
-        description: "✏️ 自定义内核名称- (-开头 留空则默认官方）"
+        description: "✏️ 自定义内核名称 (留空则默认官方）"
         required: false
         default: ''
       
       custom_kernel_time:
-        description: "⏰ 自定义构建时间- (英文时间字符串格式 留空则默认官方）"
+        description: "⏰ 自定义构建时间 (英文时间字符串格式 留空则默认）"
         required: false
         default: ''
 
       enable_ReKernel:
-        description: "添加 Re-Kernel 支持"
+        description: "添加Re-Kernel支持"
         required: true
         default: false
         type: boolean
 
       enable_Adios:
         description: "启用ADIOS IO调度器支持"
+        required: true
+        default: true
+        type: boolean
+
+      enable_bbg:
+        description: "添加BBG基带守护"
         required: true
         default: true
         type: boolean
@@ -55,16 +67,17 @@ on:
 
 jobs:
   build:
-    name: Build_${{ github.event.inputs.device_name }}_${{ github.event.inputs.ksu_type }}
+    name: Build_${{ github.event.inputs.kernel_version }}_${{ github.event.inputs.ksu_type }}
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       KSU_TYPE:               ${{ github.event.inputs.ksu_type }}
-      DEVICES_NAME:           ${{ github.event.inputs.device_name }}
+      KERNEL_VERSION:           ${{ github.event.inputs.kernel_version }}
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
       ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
       ENABLE_ADIOS:           ${{ github.event.inputs.enable_Adios }}
+      ENABLE_BBG:             ${{ github.event.inputs.enable_bbg }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
     steps:
       - uses: actions/checkout@v5
@@ -72,26 +85,41 @@ jobs:
           fetch-depth: 0
       - name: ⚙️ Set REPO_MANIFEST (设置对应机型配置文件)
         run: |
-          if [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
-          case "${{ env.DEVICES_NAME }}" in
-           oneplus_ace5)
-                DEFAULT_SUFFIX='android14-11-o-gca13bffobf09'
+          case "${{ env.KERNEL_VERSION }}" in
+            '6.1.57')
+              echo "REPO_MANIFEST=sm8650_u_14.0.0_oneplus12" >> $GITHUB_ENV
+              ;;
+            '6.1.75')
+              echo "REPO_MANIFEST=sm8650_u_14.1.0_onepluspad_pro" >> $GITHUB_ENV
+              ;;
+            '6.1.115')
+              echo "REPO_MANIFEST=mt6989_v_15.0.2_ace5_race" >> $GITHUB_ENV
+              ;;
+            '6.1.118')
+              echo "REPO_MANIFEST=sm8650_v_15.0.0_oneplus12" >> $GITHUB_ENV
+              ;;
+            '6.1.128')
+              echo "REPO_MANIFEST=mt6897_v_15.0.0_oneplus_pad" >> $GITHUB_ENV
+              ;;
+            '6.1.134')
+              echo "REPO_MANIFEST=mt6989_b_16.0.0_ace5_race" >> $GITHUB_ENV
+              ;;
+            '6.1.141')
+              echo "REPO_MANIFEST=sm8650_b_16.0.0_oneplus12" >> $GITHUB_ENV
               ;;
           esac
+          if [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
+            DEFAULT_SUFFIX='android14-11-o-gca13bffobf09'
             echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
-            echo "使用原官核名称：$DEFAULT_SUFFIX"
+            echo "使用默认名称：$DEFAULT_SUFFIX"
           else
             echo "使用自定义名称: ${{ github.event.inputs.custom_kernel_suffix }}"
             echo "DEFAULT_SUFFIX=${{ github.event.inputs.custom_kernel_suffix }}" >> $GITHUB_ENV
           fi
           if [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
-            case "${{ env.DEVICES_NAME }}" in
-              oneplus_ace5)
-                  KERNEL_TIME='Mon Dec  8 04:00:43 UTC 2025'
-                ;;
-            esac
+            KERNEL_TIME='Mon Dec  8 04:00:43 UTC 2025'
             echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
-            echo "使用官核时间：$KERNEL_TIME"
+            echo "使用默认时间：$KERNEL_TIME"
           else
             echo "使用自定义构建时间: ${{ github.event.inputs.custom_kernel_time }}"
             echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
@@ -110,13 +138,29 @@ jobs:
           sudo apt update &&
           sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
           echo "正在克隆Common源码仓库..."
-          aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/sm8650_b_16.0.0_ace_5.tar.gz -o common.tar.gz
-          tar xzf common.tar.gz && 
-          mv "android_kernel_common_oneplus_sm8650-oneplus-sm8650_b_16.0.0_ace_5" common
+          if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
+            tar xzf common.tar.gz && 
+            mv "android_kernel_common_oneplus_sm8650-oneplus-${REPO_MANIFEST}" common
+          elif [ "${KERNEL_VERSION}" = "6.1.115" ] || [ "${KERNEL_VERSION}" = "6.1.134" ]; then
+            aria2c -s16 -x16 -k1M aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6989/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
+            tar xzf common.tar.gz && 
+            mv "android_kernel_oneplus_mt6989-oneplus-${REPO_MANIFEST}" common
+          elif [ "${KERNEL_VERSION}" = "6.1.128" ]; then
+            aria2c -s16 -x16 -k1M aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6897/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
+            tar xzf common.tar.gz && 
+            mv "android_kernel_oneplus_mt6897-oneplus-${REPO_MANIFEST}" common
+          fi
           rm -rf common.tar.gz 
           cd ..
           echo "正在克隆Vendor源码仓库..."
-          aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8650/archive/refs/heads/oneplus/sm8650_b_16.0.0_ace_5.tar.gz -o kernel_vendor.tar.gz
+          if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz
+          elif [ "${KERNEL_VERSION}" = "6.1.115" ] || [ "${KERNEL_VERSION}" = "6.1.134" ]; then
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6989/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz  
+          elif [ "${KERNEL_VERSION}" = "6.1.128" ]; then
+            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6897/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz
+          fi
           tar xzf kernel_vendor.tar.gz
           # 确认解压后的目录名
           VENDOR_SRC_DIR=$(find . -maxdepth 1 -type d -name "android_kernel_modules_and_devicetree*" | head -n 1)
@@ -157,20 +201,20 @@ jobs:
 
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
-          echo "CCACHE_DIR=$HOME/.ccache_${{ env.KSU_TYPE }}_${{ env.DEVICES_NAME }}" >> $GITHUB_ENV
+          echo "CCACHE_DIR=$HOME/.ccache_${{ env.KSU_TYPE }}_${{ env.KERNEL_VERSION }}" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=10G" >> $GITHUB_ENV
           echo "当前磁盘空间："
           df -h
-          echo "当前构建内核机型：${{ env.DEVICES_NAME }}"
+          echo "当前构建内核机型：${{ env.KERNEL_VERSION }}"
 
       - name: 📥 Restore ccache (载入当前机型的ccache缓存)
         id: ccache-restore
         uses: actions/cache/restore@v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-latest
+          key: ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}-latest
           restore-keys: |
-            ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-
+            ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}-
 
       - name: 🔎 Find public ccache in releases (查找公共缓存)
         id: public-ccache
@@ -179,7 +223,7 @@ jobs:
         env:
           PUBLIC_CACHE_REPO: ${{ vars.PUBLIC_CACHE_REPO }}
           PUBLIC_CACHE_TAG: ${{ vars.PUBLIC_CACHE_TAG }}
-          DEVICE_NAME: ${{ env.DEVICES_NAME }}
+          KERNEL_VERSION: ${{ env.KERNEL_VERSION }}
         with:
           script: |
             const repoName = process.env.PUBLIC_CACHE_REPO || 'showdo/Public_Ccache';
@@ -305,6 +349,18 @@ jobs:
             echo "未命中仓库缓存，也未找到公共缓存，将从空缓存开始构建"
           fi
 
+      - name: 🔧 apply lz4 1.10.0 & zstd 1.5.7 patches (添加lz4 1.10.0 & zstd 1.5.7补丁)
+        run: |
+          echo "正在添加lz4 1.10.0 & zstd 1.5.7补丁…"
+          cd kernel_workspace
+          git clone https://github.com/cctv18/oppo_oplus_realme_sm8650.git
+          cp ./oppo_oplus_realme_sm8650/zram_patch/001-lz4.patch ./common
+          cp ./oppo_oplus_realme_sm8650/zram_patch/lz4armv8.S ./common/lib
+          cp ./oppo_oplus_realme_sm8650/zram_patch/002-zstd.patch ./common/
+          cd ./common
+          git apply -p1 < 001-lz4.patch || true
+          patch -p1 < 002-zstd.patch || true
+
       - name: 🔧 Add Re-Kernel Support (添加Re-Kernel支持)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         working-directory: kernel_workspace/common
@@ -347,6 +403,16 @@ jobs:
             echo "✓ 已启用 ADIOS I/O 调度器支持"
           fi
           echo "✓ ADIOS I/O 调度器支持配置完成"
+
+      - name: 🔧 Set Baseband-guard (开启BBG基带守护)
+        if: ${{ env.ENABLE_BBG == 'true' }}
+        run: |
+          echo "正在启用启用内核级基带保护支持…"
+          cd kernel_workspace
+          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+          echo "CONFIG_BBG=y" >> ./common/arch/arm64/configs/gki_defconfig
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./common/security/Kconfig
+
       
       
       - name: ⚙️ Set ${{ env.KSU_TYPE }} (设置${{ env.KSU_TYPE }})
@@ -532,14 +598,14 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-${{ github.run_id }}
+          key: ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}-${{ github.run_id }}
 
       - name: 🧹 Clean old ccache (清理旧缓存)
         if: env.BUILD_TIME > 480
         uses: actions/github-script@v8
         env:
-          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-
-          CURRENT_KEY: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-${{ github.run_id }}
+          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}-
+          CURRENT_KEY: ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}-${{ github.run_id }}
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -595,7 +661,7 @@ jobs:
       - name: 📤 Upload AnyKernel3 (上传 Anykernel3)
         uses: actions/upload-artifact@v5
         with:
-         name: AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}
+         name: AK3_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}
          path: ./AnyKernel3/*
 
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
