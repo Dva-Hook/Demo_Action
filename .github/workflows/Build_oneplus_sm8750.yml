@@ -698,7 +698,7 @@ jobs:
         if: env.BUILD_TIME > 480
         uses: actions/github-script@v8
         env:
-          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}
+          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-
           CURRENT_KEY: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-${{ github.run_id }}
         with:
           script: |

@@ -32,6 +32,12 @@ on:
         required: false
         default: ''
 
+      enable_ReKernel:
+        description: "添加 Re-Kernel 支持"
+        required: true
+        default: false
+        type: boolean
+
       enable_susfs:
         description: "启用SUSFS"
         required: true
@@ -51,6 +57,7 @@ jobs:
       DEVICES_NAME:           ${{ github.event.inputs.device_name }}
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
+      ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
     steps:
       - uses: actions/checkout@v5
@@ -295,6 +302,18 @@ jobs:
           else
             echo "未命中仓库缓存，也未找到公共缓存，将从空缓存开始构建"
           fi
+
+      - name: 🔧 Add Re-Kernel Support (添加Re-Kernel支持)
+        if: ${{ env.ENABLE_REKERNEL == 'true' }}
+        working-directory: kernel_workspace/common
+        run: |
+          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/Re-Kernel_Support.patch"
+          cp "$PATCH_FILE" ./
+          patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/rk.log || true
+          rm -f Re-Kernel_Support.patch
+          echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
+          echo "✅ Re-Kernel配置已注入"
       
       
       - name: ⚙️ Set ${{ env.KSU_TYPE }} (设置${{ env.KSU_TYPE }})
@@ -485,7 +504,7 @@ jobs:
         if: env.BUILD_TIME > 480
         uses: actions/github-script@v8
         env:
-          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}
+          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-
           CURRENT_KEY: ccache-${{ env.KSU_TYPE }}-${{ env.DEVICES_NAME }}-${{ github.run_id }}
         with:
           script: |
@@ -544,3 +563,70 @@ jobs:
         with:
          name: AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}
          path: ./AnyKernel3/*
+
+      - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
+        id: download-rekernel
+        if: ${{ env.ENABLE_REKERNEL == 'true' }}
+        uses: actions/github-script@v8
+        env:
+          KERNEL_MAJOR: "6.1"
+        with:
+          script: |
+            const owner = 'Sakion-Team';
+            const repo = 'Re-Kernel';
+            const kernelMajor = process.env.KERNEL_MAJOR;
+
+            core.info(`正在获取 ${owner}/${repo} 的最新 release...`);
+
+            const release = await github.rest.repos.getLatestRelease({
+              owner,
+              repo,
+            });
+            core.info(`最新版本: ${release.data.tag_name}`);
+            const escapedKernel = kernelMajor.replace(/\./g, '\\.');
+            const pattern = new RegExp(`^Re-Kernel-v[\\d.]+-${escapedKernel}\\.zip$`);
+
+            let targetAsset = null;
+            for (const asset of release.data.assets || []) {
+              if (pattern.test(asset.name)) {
+                targetAsset = asset;
+                break;
+              }
+            }
+
+            if (!targetAsset) {
+              core.setFailed(`未找到匹配的 Re-Kernel 模块资产 (模式: ${pattern.source})`);
+              return;
+            }
+
+            core.info(`找到目标资产: ${targetAsset.name} (${(targetAsset.size / 1024).toFixed(1)} KB)`);
+            core.setOutput('asset-name', targetAsset.name);
+            core.setOutput('download-url', targetAsset.browser_download_url);
+            core.setOutput('tag-name', release.data.tag_name);
+
+      - name: 📥 Download Re-Kernel module (下载 Re-Kernel 模块)
+        if: ${{ env.ENABLE_REKERNEL == 'true' }}
+        working-directory: kernel_workspace
+        env:
+          ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
+          DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
+          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+        run: |
+          set -euo pipefail
+          echo "正在下载 Re-Kernel 模块: $ASSET_NAME"
+          echo "下载地址: $DOWNLOAD_URL"
+          aria2c -s16 -x16 -k1M "$DOWNLOAD_URL" -o "$ASSET_NAME"
+          echo "✓ Re-Kernel 模块下载完成"
+          ls -lh "$ASSET_NAME"
+          echo "正在创建目录 $ARTIFACT_NAME 并解压模块..."
+          mkdir -p "$ARTIFACT_NAME"
+          unzip -q "$ASSET_NAME" -d "$ARTIFACT_NAME"
+          echo "✓ 目录结构:"
+          ls -lR "$ARTIFACT_NAME"
+
+      - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
+        if: ${{ env.ENABLE_REKERNEL == 'true' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          path: kernel_workspace/Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
