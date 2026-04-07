@@ -38,6 +38,12 @@ on:
         default: false
         type: boolean
 
+      enable_Adios:
+        description: "启用ADIOS IO调度器支持"
+        required: true
+        default: true
+        type: boolean
+
       enable_susfs:
         description: "启用SUSFS"
         required: true
@@ -58,6 +64,7 @@ jobs:
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
       ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
+      ENABLE_ADIOS:           ${{ github.event.inputs.enable_Adios }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
     steps:
       - uses: actions/checkout@v5
@@ -309,6 +316,37 @@ jobs:
           echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
           echo "✅ Re-Kernel配置已注入"
+
+      - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler 支持)
+        working-directory: kernel_workspace/common
+        run: |
+          echo "开始添加 ADIOS I/O 调度器支持..."
+          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler_6.1.patch"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "::error::未找到 ADIOS I/O 调度器补丁文件"
+            exit 1
+          fi
+          if [ -f "block/adios.c" ]; then
+            echo "✓ ADIOS I/O 调度器文件已存在，跳过应用补丁"
+          else
+            cp "$PATCH_FILE" ./adios_ioscheduler_6.1.patch
+            echo "正在应用 ADIOS I/O 调度器补丁..."
+            if patch -p1 --ignore-whitespace -F 3 < adios_ioscheduler_6.1.patch 2>&1 | tee /tmp/adios_patch.log; then
+              echo "✓ ADIOS I/O 调度器补丁应用成功"
+            else
+              echo "::warning::ADIOS 补丁应用出现问题"
+              if grep -q "malformed patch" /tmp/adios_patch.log; then
+                patch -p1 --force --ignore-whitespace < adios_ioscheduler_6.1.patch || true
+              fi
+            fi
+            rm -f adios_ioscheduler_6.1.patch
+          fi
+          if ! grep -q "CONFIG_MQ_IOSCHED_ADIOS" arch/arm64/configs/gki_defconfig; then
+            echo "CONFIG_MQ_IOSCHED_ADIOS=y" >> arch/arm64/configs/gki_defconfig
+            echo "CONFIG_MQ_IOSCHED_DEFAULT_ADIOS=y" >> arch/arm64/configs/gki_defconfig
+            echo "✓ 已启用 ADIOS I/O 调度器支持"
+          fi
+          echo "✓ ADIOS I/O 调度器支持配置完成"
       
       
       - name: ⚙️ Set ${{ env.KSU_TYPE }} (设置${{ env.KSU_TYPE }})
