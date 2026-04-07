@@ -357,16 +357,16 @@ jobs:
               if [ ! -f "kernel/oplus_cpu/sched/Kconfig" ]; then
                 echo "::warning::补丁未能创建关键文件，手动创建空 Kconfig 作为回退"
                 mkdir -p kernel/oplus_cpu/sched
-                cat > kernel/oplus_cpu/sched/Kconfig << 'EOF'
-                # 空 Kconfig 文件（补丁应用失败时的回退）
-                # 原始文件应包含完整的 OPlus CPU 调度配置选项
-                config SCHED_OPLUS
-                    bool "OPlus scheduler support"
-                    default y
-                    help
-                      This is a placeholder Kconfig for OPlus scheduler.
-                      The full configuration should come from the complete_file.patch.
-                EOF
+                printf '%s\n' \
+                  '# 空 Kconfig 文件（补丁应用失败时的回退）' \
+                  '# 原始文件应包含完整的 OPlus CPU 调度配置选项' \
+                  'config SCHED_OPLUS' \
+                  '    bool "OPlus scheduler support"' \
+                  '    default y' \
+                  '    help' \
+                  '      This is a placeholder Kconfig for OPlus scheduler.' \
+                  '      The full configuration should come from the complete_file.patch.' \
+                  > kernel/oplus_cpu/sched/Kconfig
                 echo "✓ 已创建回退 Kconfig 文件"
               fi
               
