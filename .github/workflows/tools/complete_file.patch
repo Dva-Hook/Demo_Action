@@ -40166,11 +40166,11 @@ index 0000000000000..3cff9680687eb
 \ No newline at end of file
 diff --git a/kernel/oplus_cpu/sched/Kconfig b/kernel/oplus_cpu/sched/Kconfig
 new file mode 100755
-index 0000000000000..d2c96ab34fb6f
+index 0000000000000..b88d94710b549
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/Kconfig
-@@ -0,0 +1,258 @@
-+# SPDX-License-Identifier: GPL-2.0-only
+@@ -0,0 +1,260 @@
++
 +# Copyright (C) 2018-2020 Oplus. All rights reserved.
 +
 +config OPLUS_FEATURE_PERFORMANCE_SCHED
@@ -40394,14 +40394,9 @@ index 0000000000000..d2c96ab34fb6f
 +	help
 +	  "Turning off the camera's ux attribute in audio mode"
 +
-+config OPLUS_SCHED_GROUP_OPT
-+	bool "Oplus sched group optimization"
-+	depends on FAIR_GROUP_SCHED
-+	default FAIR_GROUP_SCHED
-+
 +config OPLUS_FEATURE_SCHED_DDL
 +	bool "sched deadline"
-+	default n
++	default y
 +	help
 +		normal cfs tasks worst sched latency optimization
 +
@@ -40428,6 +40423,13 @@ index 0000000000000..d2c96ab34fb6f
 +	bool "Oplus sched group optimization"
 +	depends on FAIR_GROUP_SCHED
 +	default FAIR_GROUP_SCHED
++
++config OPLUS_CPU_SKIP_ROTATION
++	bool "oplus cpu skip rotation"
++	default n
++	depends on OPLUS_FEATURE_SCHED_ASSIST
++	help
++	  rotation need skip ux thread.
 diff --git a/kernel/oplus_cpu/sched/Makefile b/kernel/oplus_cpu/sched/Makefile
 new file mode 100755
 index 0000000000000..41e2034500d84
@@ -46651,7 +46653,7 @@ index 0000000000000..a6256ec2ad3cc
 \ No newline at end of file
 diff --git a/kernel/oplus_cpu/sched/qos_sched/qos_sched.c b/kernel/oplus_cpu/sched/qos_sched/qos_sched.c
 new file mode 100755
-index 0000000000000..a1a112d2671ca
+index 0000000000000..ab6192fec1031
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/qos_sched/qos_sched.c
 @@ -0,0 +1,814 @@
@@ -47060,7 +47062,7 @@ index 0000000000000..a1a112d2671ca
 +{
 +	char buffer[MAX_OUTPUT];
 +	char *str, *token;
-+	char opt_str[QOS_OPT_STR_MAX][13] = {"0", "0", "0"};
++	char opt_str[OPT_STR_MAX][13] = {"0", "0", "0"};
 +	int cnt = 0, err = 0, pid;
 +	bool process = false;
 +	struct task_struct *task;
@@ -47079,13 +47081,13 @@ index 0000000000000..a1a112d2671ca
 +
 +	buffer[count] = '\0';
 +	str = strstrip(buffer);
-+	while ((token = strsep(&str, " ")) && *token && (cnt < QOS_OPT_STR_MAX)) {
++	while ((token = strsep(&str, " ")) && *token && (cnt < OPT_STR_MAX)) {
 +		strlcpy(opt_str[cnt], token, sizeof(opt_str[cnt]));
 +		cnt += 1;
 +	}
 +
-+	if (cnt == QOS_OPT_STR_MAX) {
-+		err = kstrtoint(strstrip(opt_str[QOS_OPT_STR_VAL]), 10, &pid);
++	if (cnt == OPT_STR_MAX) {
++		err = kstrtoint(strstrip(opt_str[OPT_STR_VAL]), 10, &pid);
 +		if (err)
 +			return err;
 +
@@ -47098,7 +47100,7 @@ index 0000000000000..a1a112d2671ca
 +			get_task_struct(task);
 +		rcu_read_unlock();
 +
-+		if (!strncmp(opt_str[QOS_OPT_STR_PID], "p", 1)
++		if (!strncmp(opt_str[OPT_STR_PID], "p", 1)
 +			&& task && !thread_group_leader(task)) {
 +			put_task_struct(task);
 +			return -EFAULT;
@@ -47106,10 +47108,10 @@ index 0000000000000..a1a112d2671ca
 +		if (task)
 +			put_task_struct(task);
 +
-+		if (!strncmp(opt_str[QOS_OPT_STR_TYPE], "r", 1)) {
-+			if (!strncmp(opt_str[QOS_OPT_STR_PID], "p", 1))
++		if (!strncmp(opt_str[OPT_STR_TYPE], "r", 1)) {
++			if (!strncmp(opt_str[OPT_STR_PID], "p", 1))
 +				process = true;
-+			else if (strncmp(opt_str[QOS_OPT_STR_PID], "t", 1))
++			else if (strncmp(opt_str[OPT_STR_PID], "t", 1))
 +				return -EFAULT;
 +
 +			atomic_long_set(qos_pid, (pid << QOS_TASK_PID_FLAG_BITS) | process);
@@ -47471,10 +47473,10 @@ index 0000000000000..a1a112d2671ca
 +MODULE_LICENSE("GPL v2");
 diff --git a/kernel/oplus_cpu/sched/qos_sched/qos_sched.h b/kernel/oplus_cpu/sched/qos_sched/qos_sched.h
 new file mode 100755
-index 0000000000000..b53ceca12ee72
+index 0000000000000..488c4b8819ec7
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/qos_sched/qos_sched.h
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,70 @@
 +/* SPDX-License-Identifier: GPL-2.0-only */
 +/*
 + * Copyright (C) 2025 Oplus. All rights reserved.
@@ -47501,13 +47503,6 @@ index 0000000000000..b53ceca12ee72
 +	SET_PID_LEVEL,
 +	SET_TID_ARRAY_LEVEL,
 +	SET_LEVEL_MAX,
-+};
-+
-+enum {
-+	QOS_OPT_STR_TYPE = 0,
-+	QOS_OPT_STR_PID,
-+	QOS_OPT_STR_VAL,
-+	QOS_OPT_STR_MAX = 3,
 +};
 +
 +#define QOS_TASK_PID_FLAG_BITS 1
@@ -53217,10 +53212,10 @@ index 0000000000000..33b335ae06ecd
 +}
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_common.c b/kernel/oplus_cpu/sched/sched_assist/sa_common.c
 new file mode 100755
-index 0000000000000..5efefabea33a7
+index 0000000000000..44f6324687421
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_common.c
-@@ -0,0 +1,2098 @@
+@@ -0,0 +1,2095 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (C) 2020-2022 Oplus. All rights reserved.
@@ -53265,12 +53260,12 @@ index 0000000000000..5efefabea33a7
 +#include <../kernel/oplus_cpu/sched/frame_boost/frame_group.h>
 +#endif
 +
-+#if IS_ENABLED(CONFIG_OPLUS_SCHED_TUNE)
-+#include <../kernel/oplus_cpu/sched/sched_tune/tune.h>
-+#endif
-+
 +#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
 +#include "sa_ddl.h"
++#endif
++
++#if IS_ENABLED(CONFIG_OPLUS_SCHED_TUNE)
++#include <../kernel/oplus_cpu/sched/sched_tune/tune.h>
 +#endif
 +
 +#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
@@ -55279,12 +55274,6 @@ index 0000000000000..5efefabea33a7
 +#endif
 +
 +#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
-+void android_rvh_cpu_cgroup_online_handler(void *unused, struct cgroup_subsys_state *css)
-+{
-+       oplus_update_tg_map(css,false);
-+}
-+
-+
 +static inline void update_load_set(struct load_weight *lw, unsigned long w)
 +{
 +	lw->weight = w;
@@ -55293,6 +55282,9 @@ index 0000000000000..5efefabea33a7
 +
 +void android_vh_reweight_entity_handler(void *unused, struct sched_entity *se)
 +{
++	if (!(global_sched_group_enabled & 0x1))
++		return;
++
 +	if (!entity_is_task(se)) {
 +		struct cfs_rq *gcfs_rq = NULL;
 +		struct task_group *tg = NULL;
@@ -55321,7 +55313,7 @@ index 0000000000000..5efefabea33a7
 +#endif
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_common.h b/kernel/oplus_cpu/sched/sched_assist/sa_common.h
 new file mode 100755
-index 0000000000000..6230633de6796
+index 0000000000000..09e04837027d6
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_common.h
 @@ -0,0 +1,831 @@
@@ -55612,6 +55604,7 @@ index 0000000000000..6230633de6796
 +extern int global_sched_assist_enabled;
 +extern int global_sched_assist_scene;
 +extern int global_sched_disable_camera_ux;
++extern int global_sched_group_enabled;
 +
 +struct rq;
 +
@@ -56141,8 +56134,7 @@ index 0000000000000..6230633de6796
 +#endif
 +void android_rvh_set_cpus_allowed_comm_handler(void *unused, struct task_struct *task, const struct cpumask *new_mask);
 +void android_rvh_set_cpus_allowed_by_task_handler(void *unused, const struct cpumask *cpu_valid_mask, const struct cpumask *new_mask,
-+												struct task_struct *p, unsigned int *dest_cpu);
-+void android_rvh_set_cpus_allowed_comm_handler(void *unused, struct task_struct *task, const struct cpumask *new_mask);
++				struct task_struct *p, unsigned int *dest_cpu);
 +void android_vh_reweight_entity_handler(void *unused, struct sched_entity *se);
 +#if IS_ENABLED(CONFIG_OPLUS_FEATURE_BAN_APP_SET_AFFINITY)
 +void android_vh_sched_setaffinity_early_handler(void *unused, struct task_struct *task, const struct cpumask *new_mask, bool *skip);
@@ -56373,10 +56365,10 @@ index 0000000000000..0d6ca91db2523
 +
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_ddl.c b/kernel/oplus_cpu/sched/sched_assist/sa_ddl.c
 new file mode 100755
-index 0000000000000..9eed2efa0f459
+index 0000000000000..3610c39cc612c
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_ddl.c
-@@ -0,0 +1,590 @@
+@@ -0,0 +1,588 @@
 +#include <linux/sort.h>
 +#include <linux/proc_fs.h>
 +#include <linux/sched/cputime.h>
@@ -56522,7 +56514,7 @@ index 0000000000000..9eed2efa0f459
 +	struct oplus_task_struct *ots = get_oplus_task_struct(prev);
 +	u64 now = rq_clock(rq);
 +
-+	if(!prev->se.on_rq || IS_ERR_OR_NULL(ots))
++	if (!prev->se.on_rq || IS_ERR_OR_NULL(ots))
 +		return;
 +
 +	if (ots->ddl_active_ts) {
@@ -56687,7 +56679,7 @@ index 0000000000000..9eed2efa0f459
 +
 +void update_ddl_hit_history(struct task_struct *p)
 +{
-+	if(p) {
++	if (p) {
 +		if (!strlen(ddl_sdata[p->pid].comm)
 +			|| strncmp(p->comm, ddl_sdata[p->pid].comm, strlen(p->comm))) {
 +			memset(&ddl_sdata[p->pid], 0, sizeof(struct ddl_sinfo_data));
@@ -56746,10 +56738,10 @@ index 0000000000000..9eed2efa0f459
 +
 +/*
 + * Example:
-+ * adb shell "echo "p 1611 8" > proc/oplus_scheduler/sched_assist/ux_task"
-+ * 'p' means pid, '1611' is thread pid, '8' means set ux state as '2'
++ * adb shell "echo "p 1611 8" > proc/oplus_scheduler/sched_assist/ddl_task"
++ * 'p' means pid, '1611' is thread pid, '8' means set ddl thres to 8ms
 + *
-+ * adb shell "echo "r 1611" > proc/oplus_scheduler/sched_assist/ux_task"
++ * adb shell "echo "r 1611" > proc/oplus_scheduler/sched_assist/ddl_task"
 + * "r" means we want to read thread "1611"'s ddl info
 + */
 +static ssize_t proc_ddl_task_write(struct file *file, const char __user *buf,
@@ -56918,8 +56910,7 @@ index 0000000000000..9eed2efa0f459
 +	num = min(num, (unsigned int)PID_MAX_DEFAULT - 1);
 +	sort(ddl_sdata, num, sizeof(struct ddl_sinfo_data), ddl_sinfo_comp, NULL);
 +
-+	for (i = 0; i < NUM_DDL_HIT_ITEM; i++)
-+	{
++	for (i = 0; i < NUM_DDL_HIT_ITEM; i++) {
 +		if (!ddl_sdata[i].hit)
 +			break;
 +		len += snprintf(buffer + len, sizeof(buffer) - len, "%s:%llu ",
@@ -56965,7 +56956,6 @@ index 0000000000000..9eed2efa0f459
 +		remove_proc_entry("ddl_sinfo", pde);
 +		pr_err("failed to create proc node ddl_sinfo\n");
 +	}
-+
 +}
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_ddl.h b/kernel/oplus_cpu/sched/sched_assist/sa_ddl.h
 new file mode 100755
@@ -57060,10 +57050,10 @@ index 0000000000000..a7c9df759aa9c
 +#endif /* _OPLUS_SA_EXEC_H_ */
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_fair.c b/kernel/oplus_cpu/sched/sched_assist/sa_fair.c
 new file mode 100755
-index 0000000000000..5cf96c3841513
+index 0000000000000..45a47692f0b5c
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_fair.c
-@@ -0,0 +1,1339 @@
+@@ -0,0 +1,1362 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (C) 2020-2024 Oplus. All rights reserved.
@@ -57380,7 +57370,7 @@ index 0000000000000..5cf96c3841513
 +static inline bool select_target_cpu_fastpath(struct task_struct *task, int target_cpu)
 +{
 +	struct rq *orig_rq = cpu_rq(target_cpu);
-+	struct oplus_rq *orig_orq = (struct oplus_rq *)orig_rq->android_oem_data1;
++	struct oplus_rq *orig_orq = get_oplus_rq(orig_rq);
 +	bool latency_sensitive = false;
 +
 +	if (global_lowend_plat_opt && global_less_prime_cpu_arch) {
@@ -58024,7 +58014,8 @@ index 0000000000000..5cf96c3841513
 +#endif
 +
 +#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
-+		oplus_ddl_check_preempt(rq, p, curr, preempt, nopreempt);
++		if (global_sched_ddl_enabled)
++			oplus_ddl_check_preempt(rq, p, curr, preempt, nopreempt);
 +#endif
 +
 +		return;
@@ -58227,6 +58218,28 @@ index 0000000000000..5cf96c3841513
 +
 +#endif /* CONFIG_OPLUS_FEATURE_SCHED_SPREAD */
 +
++/* implement vender hook in driver/android/fair.c */
++void android_rvh_place_entity_handler(void *unused, struct cfs_rq *cfs_rq, struct sched_entity *se, int initial, u64 *vruntime)
++{
++#ifdef CONFIG_OPLUS_SCHED_GROUP_OPT
++	unsigned long thresh = sysctl_sched_latency;
++
++	if (entity_is_task(se))
++		return;
++
++	if (se->my_q && se->my_q->idle > 0)
++		return;
++
++	if (initial)
++		return;
++
++	if (sched_feat(GENTLE_FAIR_SLEEPERS))
++		thresh >>= 2;
++
++	*vruntime += thresh;
++#endif
++}
++
 +void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *task,
 +			unsigned long *ideal_runtime, bool *skip_preempt,
 +			unsigned long delta_exec, struct cfs_rq *cfs_rq,
@@ -58337,7 +58350,7 @@ index 0000000000000..5cf96c3841513
 +#endif
 +
 +#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
-+	if (*repick != true)
++	if (*repick != true && global_sched_ddl_enabled)
 +		oplus_replace_next_task_ddl(rq, p, se, repick, simple);
 +#endif
 +
@@ -58405,10 +58418,10 @@ index 0000000000000..5cf96c3841513
 +#endif
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_fair.h b/kernel/oplus_cpu/sched/sched_assist/sa_fair.h
 new file mode 100755
-index 0000000000000..fcab2ccda0998
+index 0000000000000..e4db580f66af8
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_fair.h
-@@ -0,0 +1,93 @@
+@@ -0,0 +1,95 @@
 +/* SPDX-License-Identifier: GPL-2.0-only */
 +/*
 + * Copyright (C) 2020 Oplus. All rights reserved.
@@ -58443,6 +58456,7 @@ index 0000000000000..fcab2ccda0998
 +DECLARE_PER_CPU(struct task_count_rq, task_lb_count);
 +extern struct cpumask nr_mask;
 +#endif /* CONFIG_OPLUS_FEATURE_SCHED_SPREAD */
++extern int global_sched_ddl_enabled;
 +extern struct ux_sched_cputopo ux_sched_cputopo;
 +
 +void task_tpd_mask(struct task_struct *tsk, cpumask_t *request);
@@ -58486,6 +58500,7 @@ index 0000000000000..fcab2ccda0998
 +#endif /* CONFIG_OPLUS_FEATURE_SCHED_SPREAD */
 +
 +/* register vender hook in kernel/sched/fair.c */
++void android_rvh_place_entity_handler(void *unused, struct cfs_rq *cfs_rq, struct sched_entity *se, int initial, u64 *vruntime);
 +void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *task,
 +			unsigned long *ideal_runtime, bool *skip_preempt,
 +			unsigned long delta_exec, struct cfs_rq *cfs_rq,
@@ -58504,15 +58519,10 @@ index 0000000000000..fcab2ccda0998
 +#endif /* _OPLUS_SA_FAIR_H_ */
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_group.c b/kernel/oplus_cpu/sched/sched_assist/sa_group.c
 new file mode 100755
-index 0000000000000..28503ed7e49e1
+index 0000000000000..1f5cfad629ba7
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_group.c
-@@ -0,0 +1,576 @@
-+// SPDX-License-Identifier: GPL-2.0-only
-+/*
-+ * Copyright (C) 2025 Oplus. All rights reserved.
-+ */
-+
+@@ -0,0 +1,532 @@
 +#include <linux/cgroup.h>
 +#include <linux/proc_fs.h>
 +#include <linux/sched/cputime.h>
@@ -58527,7 +58537,7 @@ index 0000000000000..28503ed7e49e1
 +
 +LIST_HEAD(css_tg_map_list);
 +
-+int bg_cgrp, fg_cgrp, fgwd_cgrp, ta_cgrp;
++int bg_cgrp, lbg_cgrp, hbg_cgrp, fg_cgrp, fgwd_cgrp, ta_cgrp;
 +
 +static struct task_group *css_tg(struct cgroup_subsys_state *css)
 +{
@@ -58536,11 +58546,10 @@ index 0000000000000..28503ed7e49e1
 +
 +static inline int task_cpu_cgroup(struct task_struct *p)
 +{
-+	struct cgroup_subsys_state *css = NULL;
 +	if (IS_ERR_OR_NULL(p))
 +		return -1;
 +
-+	css = task_css(p, cpu_cgrp_id);
++	struct cgroup_subsys_state *css = task_css(p, cpu_cgrp_id);
 +	return css ? css->id : -1;
 +}
 +
@@ -58564,7 +58573,9 @@ index 0000000000000..28503ed7e49e1
 +	if (-1 == cpu_cgrp_id)
 +		return false;
 +
-+	if (bg_cgrp && cpu_cgrp_id == bg_cgrp)
++	if ((bg_cgrp && cpu_cgrp_id == bg_cgrp)
++		|| (lbg_cgrp && cpu_cgrp_id == lbg_cgrp)
++		|| (hbg_cgrp && cpu_cgrp_id == hbg_cgrp))
 +		return true;
 +
 +	return false;
@@ -58611,7 +58622,7 @@ index 0000000000000..28503ed7e49e1
 +		len += snprintf(buffer + len, sizeof(buffer) - len, "%s:%d:%llu:%d ",
 +				iter->sg_info->tg_name, iter->sg_info->id, iter->sg_info->ddl, iter->sg_info->dynamic_share);
 +		if (len > MAX_GUARD_SIZE) {
-+			len += snprintf(buffer + len, sizeof(buffer) - len, "... ");
++			len += sprintf(buffer + len, "... ");
 +			break;
 +		}
 +	}
@@ -58647,7 +58658,6 @@ index 0000000000000..28503ed7e49e1
 +{
 +	struct css_task_iter it;
 +	struct task_struct *p;
-+
 +	if (IS_ERR_OR_NULL(map) || IS_ERR_OR_NULL(map->sg_info))
 +		return;
 +
@@ -58813,80 +58823,6 @@ index 0000000000000..28503ed7e49e1
 +	},
 +};
 +
-+u64 get_sg_ddl_rthres(struct task_group *tg)
-+{
-+	struct css_tg_map *map = NULL;
-+
-+	if (!tg)
-+		return SG_DDL_RTHRES_DEFAULT;
-+
-+	map = (struct css_tg_map *) READ_ONCE(tg->android_vendor_data1[OPLUS_SG_IDX]);
-+	if (IS_ERR_OR_NULL(map) || IS_ERR_OR_NULL(map->sg_info))
-+		return SG_DDL_RTHRES_DEFAULT;
-+
-+	return map->sg_info->ddl_rthres;
-+}
-+
-+#else
-+static const struct oplus_sg_info oplus_sg_conf[OPLUS_CGRP_MAX] = {
-+	[FOREGROUND] = {
-+		.tg_name = "foreground",
-+		.dynamic_share = 1,
-+	},
-+	[BACKGROUND] = {
-+		.tg_name = "background",
-+	},
-+	[TOP_APP] = {
-+		.tg_name = "top-app",
-+		.dynamic_share = 1,
-+	},
-+	[SYSTEM_BG] = {
-+		.tg_name = "system-background",
-+	},
-+	[FOREGROUND_WINDOW] = {
-+		.tg_name = "foreground_window",
-+		.dynamic_share = 1,
-+	},
-+	[CAMERA_DAEMON] = {
-+		.tg_name = "camera-daemon",
-+		.dynamic_share = 1,
-+	},
-+	[SERVICE_FG] = {
-+		.tg_name = "service-foreground",
-+		.dynamic_share = 1,
-+	},
-+	[NORMAL_FG] = {
-+		.tg_name = "normal-foreground",
-+		.dynamic_share = 1,
-+	},
-+	[MEM] = {
-+		.tg_name = "mem",
-+		.dynamic_share = 1,
-+	},
-+	[SSTOP] = {
-+		.tg_name = "sstop",
-+		.dynamic_share = 1,
-+	},
-+	[SSFG] = {
-+		.tg_name = "ssfg",
-+		.dynamic_share = 1,
-+	},
-+	[BG] = {
-+		.tg_name = "bg",
-+	},
-+};
-+
-+u64 get_sg_ddl_rthres(struct task_group *tg)
-+{
-+	return 0;
-+}
-+
-+void oplus_update_ddl_tasks(struct cgroup_subsys_state *css, struct css_tg_map *map)
-+{
-+}
-+
-+#endif
-+
 +static const struct oplus_sg_info *get_oplus_sg_info(int id, const char *tg_name)
 +{
 +	enum oplus_cgrp iter = FOREGROUND;
@@ -58907,6 +58843,38 @@ index 0000000000000..28503ed7e49e1
 +
 +	return &oplus_sg_conf[OPLUS_CGRP_DEFAULT];
 +}
++
++u64 get_sg_ddl_rthres(struct task_group *tg)
++{
++	struct css_tg_map *map = NULL;
++
++	if (!tg)
++		return SG_DDL_RTHRES_DEFAULT;
++
++	map = (struct css_tg_map *) READ_ONCE(tg->android_vendor_data1[OPLUS_SG_IDX]);
++	if (IS_ERR_OR_NULL(map) || IS_ERR_OR_NULL(map->sg_info))
++		return SG_DDL_RTHRES_DEFAULT;
++
++	return map->sg_info->ddl_rthres;
++}
++
++#else
++
++static const struct oplus_sg_info *get_oplus_sg_info(int id, const char *tg_name)
++{
++	return NULL;
++}
++
++u64 get_sg_ddl_rthres(struct task_group *tg)
++{
++	return 0;
++}
++
++void oplus_update_ddl_tasks(struct cgroup_subsys_state *css, struct css_tg_map *map)
++{
++}
++
++#endif
 +
 +struct css_tg_map *get_oplus_tg_map(struct task_group *tg)
 +{
@@ -58933,6 +58901,10 @@ index 0000000000000..28503ed7e49e1
 +		fgwd_cgrp = map->sg_info->id;
 +	else if (same_cgrp(map->sg_info->tg_name, "background"))
 +		bg_cgrp = map->sg_info->id;
++	else if (same_cgrp(map->sg_info->tg_name, "l-background"))
++		lbg_cgrp = map->sg_info->id;
++	else if (same_cgrp(map->sg_info->tg_name, "h-background"))
++		hbg_cgrp = map->sg_info->id;
 +	else if (same_cgrp(map->sg_info->tg_name, "top-app"))
 +		ta_cgrp = map->sg_info->id;
 +}
@@ -59069,7 +59041,6 @@ index 0000000000000..28503ed7e49e1
 +void oplus_sched_group_init(struct proc_dir_entry *pde)
 +{
 +	struct proc_dir_entry *proc_node;
-+
 +	proc_node = proc_create("tg_map", 0666, pde, &tg_map_fops);
 +	if (!proc_node) {
 +		pr_err("failed to create proc node tg_css_map\n");
@@ -59086,7 +59057,7 @@ index 0000000000000..28503ed7e49e1
 +}
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_group.h b/kernel/oplus_cpu/sched/sched_assist/sa_group.h
 new file mode 100755
-index 0000000000000..e22fdad9541aa
+index 0000000000000..f21d60a023f14
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_group.h
 @@ -0,0 +1,81 @@
@@ -59170,7 +59141,8 @@ index 0000000000000..e22fdad9541aa
 +bool ta_task(struct task_struct *p);
 +bool rootcg_task(struct task_struct *p);
 +
-+#endif /* _OPLUS_SA_GROUP_H_ */
++#endif
+\ No newline at end of file
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_hmbird.c b/kernel/oplus_cpu/sched/sched_assist/sa_hmbird.c
 new file mode 100755
 index 0000000000000..06d23ae8b7168
@@ -61757,10 +61729,10 @@ index 0000000000000..59f64b7cfa185
 +#endif /* _OPLUS_SA_PRIORITY_H_ */
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sa_sysfs.c b/kernel/oplus_cpu/sched/sched_assist/sa_sysfs.c
 new file mode 100755
-index 0000000000000..eb3e6455c6ffc
+index 0000000000000..3ea8e804a02a0
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sa_sysfs.c
-@@ -0,0 +1,1366 @@
+@@ -0,0 +1,1464 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (C) 2020 Oplus. All rights reserved.
@@ -61795,10 +61767,6 @@ index 0000000000000..eb3e6455c6ffc
 +#include "sa_group.h"
 +#endif
 +
-+#ifdef CONFIG_OPLUS_SCHED_GROUP_OPT
-+#include "sa_group.h"
-+#endif
-+
 +#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
 +#include "sa_ddl.h"
 +#endif
@@ -61824,6 +61792,12 @@ index 0000000000000..eb3e6455c6ffc
 +
 +int global_sched_disable_camera_ux = 0;
 +EXPORT_SYMBOL(global_sched_disable_camera_ux);
++/*group sched default enabled*/
++int global_sched_group_enabled = 3;
++EXPORT_SYMBOL(global_sched_group_enabled);
++/*DDL default enable*/
++int global_sched_ddl_enabled = 1;
++EXPORT_SYMBOL(global_sched_ddl_enabled);
 +
 +pid_t global_ux_task_pid = -1;
 +pid_t global_im_flag_pid = -1;
@@ -61910,6 +61884,76 @@ index 0000000000000..eb3e6455c6ffc
 +	size_t len = 0;
 +
 +	len = snprintf(buffer, sizeof(buffer), "enabled=%d\n", global_sched_assist_enabled);
++
++	return simple_read_from_buffer(buf, count, ppos, buffer, len);
++}
++
++static ssize_t proc_sched_group_enabled_write(struct file *file, const char __user *buf,
++		size_t count, loff_t *ppos)
++{
++	char buffer[20];
++	int err, val;
++
++	memset(buffer, 0, sizeof(buffer));
++
++	if (count > sizeof(buffer) - 1)
++		count = sizeof(buffer) - 1;
++
++	if (copy_from_user(buffer, buf, count))
++		return -EFAULT;
++
++	buffer[count] = '\0';
++	err = kstrtoint(strstrip(buffer), 10, &val);
++	if (err)
++		return err;
++
++	global_sched_group_enabled = val;
++
++	return count;
++}
++
++static ssize_t proc_sched_group_enabled_read(struct file *file, char __user *buf,
++		size_t count, loff_t *ppos)
++{
++	char buffer[20];
++	size_t len = 0;
++
++	len = snprintf(buffer, sizeof(buffer), "%d\n", global_sched_group_enabled);
++
++	return simple_read_from_buffer(buf, count, ppos, buffer, len);
++}
++
++static ssize_t proc_sched_ddl_enabled_write(struct file *file, const char __user *buf,
++		size_t count, loff_t *ppos)
++{
++	char buffer[20];
++	int err, val;
++
++	memset(buffer, 0, sizeof(buffer));
++
++	if (count > sizeof(buffer) - 1)
++		count = sizeof(buffer) - 1;
++
++	if (copy_from_user(buffer, buf, count))
++		return -EFAULT;
++
++	buffer[count] = '\0';
++	err = kstrtoint(strstrip(buffer), 10, &val);
++	if (err)
++		return err;
++
++	global_sched_ddl_enabled = val;
++
++	return count;
++}
++
++static ssize_t proc_sched_ddl_enabled_read(struct file *file, char __user *buf,
++		size_t count, loff_t *ppos)
++{
++	char buffer[20];
++	size_t len = 0;
++
++	len = snprintf(buffer, sizeof(buffer), "%d\n", global_sched_ddl_enabled);
 +
 +	return simple_read_from_buffer(buf, count, ppos, buffer, len);
 +}
@@ -62881,6 +62925,18 @@ index 0000000000000..eb3e6455c6ffc
 +	.proc_lseek		= default_llseek,
 +};
 +
++static const struct proc_ops proc_sched_group_enabled_fops = {
++	.proc_write		= proc_sched_group_enabled_write,
++	.proc_read		= proc_sched_group_enabled_read,
++	.proc_lseek		= default_llseek,
++};
++
++static const struct proc_ops proc_sched_ddl_enabled_fops = {
++	.proc_write		= proc_sched_ddl_enabled_write,
++	.proc_read		= proc_sched_ddl_enabled_read,
++	.proc_lseek		= default_llseek,
++};
++
 +static const struct proc_ops proc_sched_disable_camera_ux_fops = {
 +	.proc_write		= proc_sched_disable_camera_ux_write,
 +	.proc_read		= proc_sched_disable_camera_ux_read,
@@ -62996,6 +63052,18 @@ index 0000000000000..eb3e6455c6ffc
 +	if (!proc_node) {
 +		ux_err("failed to create proc node sched_assist_scene\n");
 +		goto err_creat_sched_assist_scene;
++	}
++
++	proc_node = proc_create("sched_group_enabled", 0666, d_sched_assist, &proc_sched_group_enabled_fops);
++	if (!proc_node) {
++		ux_err("failed to create proc node sched_group_enabled\n");
++		remove_proc_entry("sched_group_enabled", d_sched_assist);
++	}
++
++	proc_node = proc_create("sched_ddl_enabled", 0666, d_sched_assist, &proc_sched_ddl_enabled_fops);
++	if (!proc_node) {
++		ux_err("failed to create proc node sched_ddl_enabled\n");
++		remove_proc_entry("sched_ddl_enabled", d_sched_assist);
 +	}
 +
 +	proc_node = proc_create("ux_task", 0666, d_sched_assist, &proc_ux_task_fops);
@@ -63123,6 +63191,8 @@ index 0000000000000..eb3e6455c6ffc
 +	remove_proc_entry("sched_assist_enabled", d_sched_assist);
 +	remove_proc_entry("sched_disable_camera_ux", d_sched_assist);
 +	remove_proc_entry("lowend_plat_opt", d_sched_assist);
++	remove_proc_entry("sched_group_enabled", d_sched_assist);
++	remove_proc_entry("sched_ddl_enabled", d_sched_assist);
 +	remove_proc_entry(OPLUS_SCHEDASSIST_PROC_DIR, d_oplus_scheduler);
 +	remove_proc_entry(OPLUS_SCHEDULER_PROC_DIR, NULL);
 +}
@@ -63162,10 +63232,10 @@ index 0000000000000..ec5c9cbea0073
 +#endif /* _OPLUS_SA_SYSFS_H_ */
 diff --git a/kernel/oplus_cpu/sched/sched_assist/sched_assist.c b/kernel/oplus_cpu/sched/sched_assist/sched_assist.c
 new file mode 100755
-index 0000000000000..caaa8280925a9
+index 0000000000000..ed0d0522b181d
 --- /dev/null
 +++ b/kernel/oplus_cpu/sched/sched_assist/sched_assist.c
-@@ -0,0 +1,252 @@
+@@ -0,0 +1,248 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (C) 2020 Oplus. All rights reserved.
@@ -63240,6 +63310,10 @@ index 0000000000000..caaa8280925a9
 +
 +static void android_rvh_wake_up_new_task_handler(void *unused, struct task_struct *new) {
 +	set_ux_to_task(new);
++
++#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
++	oplus_sg_wake_up_new_task(new);
++#endif
 +	/*
 +	 * Due to function vendor hook limitation,
 +	 * used ext handler pointer to invoke to other module
@@ -63247,10 +63321,6 @@ index 0000000000000..caaa8280925a9
 +	if (wunt_handler) {
 +		wunt_handler(new);
 +	}
-+
-+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
-+	oplus_sg_wake_up_new_task(new);
-+#endif
 +}
 +
 +void register_wake_up_new_task_ext_handler(wake_up_new_task_handler_t ext_handler)
@@ -63264,6 +63334,7 @@ index 0000000000000..caaa8280925a9
 +	int ret;
 +
 +	/* register vender hook in kernel/sched/fair.c */
++	REGISTER_TRACE_RVH(android_rvh_place_entity, android_rvh_place_entity_handler);
 +	REGISTER_TRACE_RVH(android_rvh_check_preempt_tick, android_rvh_check_preempt_tick_handler);
 +	REGISTER_TRACE_RVH(android_rvh_can_migrate_task, android_rvh_can_migrate_task_handler);
 +#ifndef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
@@ -63302,11 +63373,6 @@ index 0000000000000..caaa8280925a9
 +	REGISTER_TRACE_RVH(android_rvh_dequeue_task, android_rvh_dequeue_task_handler);
 +#endif
 +	REGISTER_TRACE_RVH(android_rvh_set_cpus_allowed_by_task, android_rvh_set_cpus_allowed_by_task_handler);
-+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
-+	REGISTER_TRACE_RVH(android_rvh_cpu_cgroup_online, android_rvh_cpu_cgroup_online_handler);
-+#endif
-+	REGISTER_TRACE_RVH(android_rvh_set_cpus_allowed_comm, android_rvh_set_cpus_allowed_comm_handler);
-+
 +	REGISTER_TRACE_RVH(android_rvh_set_cpus_allowed_comm, android_rvh_set_cpus_allowed_comm_handler);
 +#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
 +	REGISTER_TRACE_VH(android_vh_reweight_entity, android_vh_reweight_entity_handler);
@@ -79005,10 +79071,10 @@ index 0000000000000..7bcbb629e4f44
 +#endif /* _oplus_IPA_THERMAL_H */
 diff --git a/kernel/oplus_cpu/thermal/oplus_local_modules.bzl b/kernel/oplus_cpu/thermal/oplus_local_modules.bzl
 new file mode 100755
-index 0000000000000..d8574d0783faf
+index 0000000000000..6e3f2cfc668d9
 --- /dev/null
 +++ b/kernel/oplus_cpu/thermal/oplus_local_modules.bzl
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,56 @@
 +load("//build/kernel/kleaf:kernel.bzl", "ddk_headers")
 +load("//build/kernel/oplus:oplus_modules_define.bzl", "define_oplus_ddk_module")
 +load("//build/kernel/oplus:oplus_modules_dist.bzl", "ddk_copy_to_dist_dir")
@@ -79057,82 +79123,14 @@ index 0000000000000..d8574d0783faf
 +        }),
 +    )
 +
-+    define_oplus_ddk_module(
-+        name = "oplus_thermal_vendor_hooks",
-+        srcs = native.glob([
-+            "**/*.h",
-+            "oplus_thermal_vendor_hooks.c",
-+        ]),
-+        includes = ["."],
-+        copts = select({
-+            "//build/kernel/kleaf:kocov_is_true": ["-fprofile-arcs", "-ftest-coverage"],
-+            "//conditions:default": [],
-+        }),
-+    )
-+
 +    ddk_copy_to_dist_dir(
 +        name = "oplus_horae",
 +        module_list = [
 +            "horae_shell_temp",
 +            "oplus_ipa_thermal",
 +            "thermal_pa_adc",
-+            "oplus_thermal_vendor_hooks",
 +        ],
 +    )
-diff --git a/kernel/oplus_cpu/thermal/oplus_thermal_vendor_hooks.c b/kernel/oplus_cpu/thermal/oplus_thermal_vendor_hooks.c
-new file mode 100755
-index 0000000000000..f7df12146eb6e
---- /dev/null
-+++ b/kernel/oplus_cpu/thermal/oplus_thermal_vendor_hooks.c
-@@ -0,0 +1,48 @@
-+// SPDX-License-Identifier: GPL-2.0-only
-+/*
-+ * Copyright (C) 2025 Oplus. All rights reserved.
-+ */
-+
-+#include <linux/thermal.h>
-+#include <trace/hooks/thermal.h>
-+#include <linux/moduleparam.h>
-+#include <linux/module.h>
-+
-+
-+static int irq_wakeable_value = 0;
-+module_param_named(irq_wakeable, irq_wakeable_value, int, 0644);
-+
-+static void oplus_thermal_pm_notify(void *unused,
-+		struct thermal_zone_device *tz, int *irq_wakeable)
-+{
-+	*irq_wakeable = irq_wakeable_value;
-+}
-+
-+static int __init oplus_thermal_vendor_hook_driver_init(void)
-+{
-+	int ret;
-+
-+	ret = register_trace_android_vh_thermal_pm_notify_suspend(
-+			oplus_thermal_pm_notify, NULL);
-+	if (ret)
-+		pr_err("Failed to register thermal_pm_notify hook, err:%d\n",
-+			ret);
-+
-+	return 0;
-+}
-+
-+static void __exit oplus_thermal_vendor_hook_driver_exit(void)
-+{
-+	unregister_trace_android_vh_thermal_pm_notify_suspend(
-+			oplus_thermal_pm_notify, NULL);
-+}
-+
-+#if IS_MODULE(CONFIG_OPLUS_THERMAL_VENDOR_HOOK)
-+module_init(oplus_thermal_vendor_hook_driver_init);
-+#else
-+subsys_initcall(oplus_thermal_vendor_hook_driver_init);
-+#endif
-+module_exit(oplus_thermal_vendor_hook_driver_exit);
-+
-+MODULE_DESCRIPTION("Oplus Thermal Vendor Hooks Driver");
-+MODULE_LICENSE("GPL");
 diff --git a/kernel/oplus_cpu/thermal/thermal_pa_adc.c b/kernel/oplus_cpu/thermal/thermal_pa_adc.c
 new file mode 100755
 index 0000000000000..d4d28d91ac422
@@ -85744,11 +85742,11 @@ index 0000000000000..df4ca82f4c2ef
 +obj-$(CONFIG_OPLUS_FEATURE_WAKER_IDENTIFY) += oplus_bsp_waker_identify.o
 +oplus_bsp_waker_identify-y := waker_identify.o
 diff --git a/kernel/oplus_cpu/waker_identify/waker_identify.c b/kernel/oplus_cpu/waker_identify/waker_identify.c
-new file mode 100644
-index 0000000000000..b6275d5ccfb66
+new file mode 100755
+index 0000000000000..2ade372666e1a
 --- /dev/null
 +++ b/kernel/oplus_cpu/waker_identify/waker_identify.c
-@@ -0,0 +1,868 @@
+@@ -0,0 +1,872 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (C) 2024 Oplus. All rights reserved.
@@ -86257,6 +86255,8 @@ index 0000000000000..b6275d5ccfb66
 +
 +	rcu_read_lock();
 +	task = find_task_by_vpid(pid);
++	if (task)
++		get_task_struct(task);
 +	rcu_read_unlock();
 +
 +	if (task) {
@@ -86275,8 +86275,10 @@ index 0000000000000..b6275d5ccfb66
 +		kfree(new_node);
 +	}
 +
-+	if (task)
++	if (task){
++		put_task_struct(task);
 +		pr_info("[waker_identify] %d start", pid);
++	}
 +
 +	return count;
 +}
