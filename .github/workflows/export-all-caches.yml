@@ -98,7 +98,8 @@ jobs:
           TARGET="${CACHE_SCOPE#${KSU_TYPE}-}"
           CCACHE_DIR="$HOME/.ccache_${KSU_TYPE}_${TARGET}"
           ARCHIVE_NAME="${CACHE_KEY}.tar.zst"
-
+          
+          # 确保TARGET中的中文括号等字符正确传递
           echo "CACHE_KEY=$CACHE_KEY" >> "$GITHUB_ENV"
           echo "KSU_TYPE=$KSU_TYPE" >> "$GITHUB_ENV"
           echo "TARGET=$TARGET" >> "$GITHUB_ENV"
@@ -143,10 +144,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.event.inputs.target_token }}
           TARGET_REPO: ${{ github.event.inputs.target_repo }}
+          LANG: zh_CN.UTF-8
+          LC_ALL: zh_CN.UTF-8
         run: |
           set -euo pipefail
+          export LANG=zh_CN.UTF-8
+          export LC_ALL=zh_CN.UTF-8
           RELEASE_TAG="exported-ccaches"
           UPLOAD_NAME="ccache-${TARGET}.tar.zst"
+          echo "调试信息: TARGET='${TARGET}'"
+          echo "调试信息: UPLOAD_NAME='${UPLOAD_NAME}'"
+          echo "调试信息: ARCHIVE_NAME='${ARCHIVE_NAME}'"
           if [ "${ARCHIVE_NAME}" != "${UPLOAD_NAME}" ]; then
             echo "重命名: ${ARCHIVE_NAME} → ${UPLOAD_NAME}"
             cp "${ARCHIVE_NAME}" "${UPLOAD_NAME}"
