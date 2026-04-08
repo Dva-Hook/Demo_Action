@@ -136,7 +136,7 @@ jobs:
           sudo apt purge man-db &&
           sudo rm -rf /var/lib/man-db/auto-update &&
           sudo apt update &&
-          sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
+          sudo apt-get install -y --no-install-recommends aria2 binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &&
           echo "正在克隆Common源码仓库..."
           if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
@@ -165,18 +165,19 @@ jobs:
           # 确认解压后的目录名
           VENDOR_SRC_DIR=$(find . -maxdepth 1 -type d -name "android_kernel_modules_and_devicetree*" | head -n 1)
           echo "Vendor源码目录: $VENDOR_SRC_DIR"
-          mv "$VENDOR_SRC_DIR/vendor" "./vendor"
+          # 符号链接指向 kernel_workspace/vendor（从 common 子目录出发的相对路径）
+          mv "$VENDOR_SRC_DIR/vendor" "kernel_workspace/vendor"
           rm -rf kernel_vendor.tar.gz "$VENDOR_SRC_DIR"
           cd kernel_workspace
           echo "正在克隆llvm-clang18工具链..."
           mkdir -p clang18 &&
           aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip -o clang.zip &&
           unzip -q clang.zip -d clang18 &&
-          rm -rf clang.zip &
+          rm -rf clang.zip &&
           echo "正在克隆构建工具..." &&
           aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip -o build-tools.zip &&
           unzip -q build-tools.zip &&
-          rm -rf build-tools.zip &
+          rm -rf build-tools.zip
           wait
           echo "所有源码及llvm-Clang18工具链初始化完成！"
           echo "正在去除 ABI 保护 & 去除 dirty 后缀..."
@@ -205,7 +206,7 @@ jobs:
               echo "(SKIP) common/drivers/soc/oplus/oplus_resctrl不存在，跳过可访问性检查"
             fi
           echo "验证vendor目录结构..."
-          ls -la ../vendor/oplus/kernel/
+          ls -la vendor/oplus/kernel/ || echo "ERROR: vendor目录不正确!"
 
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
