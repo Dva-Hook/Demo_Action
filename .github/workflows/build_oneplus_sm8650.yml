@@ -678,7 +678,7 @@ jobs:
       - name: 📤 Upload AnyKernel3 (上传 Anykernel3)
         uses: actions/upload-artifact@v5
         with:
-         name: AK3_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}
+         name: AK3_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_TG@qdykernel
          path: ./AnyKernel3/*
 
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
