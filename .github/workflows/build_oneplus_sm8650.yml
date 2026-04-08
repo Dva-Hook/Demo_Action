@@ -169,7 +169,7 @@ jobs:
           # sm8650/sm8750: ../../../vendor (需要vendor在kernel_workspace父目录)
           # mt6897/mt6989: ../../vendor (需要vendor在kernel_workspace内部)
           if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
-            # sm8650平台: vendor需放在kernel_workspace外层
+            # sm8650平台: vendor需放在kernel_workspace同级（工作区根目录/vendor）
             echo "=== sm8650 vendor包原始结构 ==="
             find "$VENDOR_SRC_DIR" -maxdepth 3 -type d
             echo "=== 检查vendor子目录 ==="
@@ -179,11 +179,11 @@ jobs:
               echo "警告: 没有找到 $VENDOR_SRC_DIR/vendor"
               ls -la "$VENDOR_SRC_DIR/"
             fi
-            mv "$VENDOR_SRC_DIR/vendor" "../vendor"
-            echo "✓ sm8650平台: vendor已移至 ../vendor (相对于kernel_workspace)"
+            mv "$VENDOR_SRC_DIR/vendor" "./vendor"
+            echo "✓ sm8650平台: vendor已移至 ./vendor (工作区根目录/vendor)"
             echo "=== 移动后的vendor结构 ==="
-            ls -la ../vendor/
-            find ../vendor/ -maxdepth 2 -type d
+            ls -la ./vendor/
+            find ./vendor/ -maxdepth 2 -type d
           else
             # 天玑平台: vendor放在kernel_workspace内部
             mv "$VENDOR_SRC_DIR/vendor" "kernel_workspace/vendor"
