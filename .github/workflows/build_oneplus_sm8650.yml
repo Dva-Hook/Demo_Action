@@ -165,8 +165,29 @@ jobs:
           # 确认解压后的目录名
           VENDOR_SRC_DIR=$(find . -maxdepth 1 -type d -name "android_kernel_modules_and_devicetree*" | head -n 1)
           echo "Vendor源码目录: $VENDOR_SRC_DIR"
+          # 打印vendor包内实际结构用于诊断
+          echo "=== Vendor包内目录结构 ==="
+          ls -la "$VENDOR_SRC_DIR/" | head -20
+          if [ -d "$VENDOR_SRC_DIR/vendor" ]; then
+            echo "✓ vendor目录存在于: $VENDOR_SRC_DIR/vendor"
+            ls -la "$VENDOR_SRC_DIR/vendor/" | head -10
+          else
+            echo "✗ vendor目录不存在于预期位置!"
+            echo "实际内容:"
+            find "$VENDOR_SRC_DIR" -maxdepth 2 -type d
+          fi
+          # 符号链接指向 kernel_workspace/vendor(从 common 子目录出发的相对路径)
+          mv "$VENDOR_SRC_DIR/vendor" "kernel_workspace/vendor"
           rm -rf kernel_vendor.tar.gz "$VENDOR_SRC_DIR"
           cd kernel_workspace
+          echo "=== 验证vendor目录 ==="
+          ls -la vendor/ | head -10
+          if [ -d "vendor/oplus/kernel" ]; then
+            echo "✓ vendor/oplus/kernel 存在"
+          else
+            echo "✗ vendor/oplus/kernel 不存在!"
+            find vendor/ -maxdepth 3 -type d | head -20
+          fi
           echo "正在克隆llvm-clang18工具链..."
           mkdir -p clang18 &&
           aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip -o clang.zip &&
@@ -204,11 +225,7 @@ jobs:
               echo "(SKIP) common/drivers/soc/oplus/oplus_resctrl不存在，跳过可访问性检查"
             fi
           echo "验证vendor目录结构..."
-          if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
-            ls -la ../vendor/oplus/kernel/ || echo "ERROR: vendor目录不正确!"
-          else
-            ls -la vendor/oplus/kernel/ || echo "ERROR: vendor目录不正确!"
-          fi
+          ls -la vendor/oplus/kernel/ || echo "ERROR: vendor目录不正确!"
 
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
