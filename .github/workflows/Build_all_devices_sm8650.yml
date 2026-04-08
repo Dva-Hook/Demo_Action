@@ -67,7 +67,6 @@ jobs:
           - '6.1.128(天玑)'
           - '6.1.134(天玑)'
           - '6.1.141'
-        default: '6.1.141'
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
