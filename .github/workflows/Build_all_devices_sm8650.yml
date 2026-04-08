@@ -28,13 +28,13 @@ on:
       enable_ReKernel:
         description: "添加Re-Kernel支持"
         required: true
-        default: false
+        default: true
         type: boolean
 
       enable_Adios:
-        description: "启用ADIOS IO调度器支持"
+        description: "启用ADIOS IO调度器支持(谨慎开启，部分机型可能不开机)"
         required: true
-        default: true
+        default: false
         type: boolean
 
       enable_bbg:
