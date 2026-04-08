@@ -391,7 +391,7 @@ jobs:
         working-directory: kernel_workspace/common
         run: |
           echo "开始添加 ADIOS I/O 调度器支持..."
-          if [ "${{ env.KERNEL_VERSION }}" = "6.1.115(天玑)" ] || [ "${{ env.KERNEL_VERSION }}" = "6.1.134(天玑)" ]; then
+          if [ "${{ env.KERNEL_VERSION }}" = "6.1.115(天玑)" ]; then
             PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler_6.1_mt6989.patch"
           else
             PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler_6.1.patch"
