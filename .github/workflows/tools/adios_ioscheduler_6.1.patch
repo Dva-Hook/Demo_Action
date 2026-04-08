@@ -2100,6 +2100,5 @@ index 5ff093cb3cf8f..1cbc62507c187 100644
  	    !blk_mq_is_shared_tags(q->tag_set->flags))
  		return NULL;
  
--	return elevator_find_get(q, "mq-deadline");
-+	return elevator_get(q, "mq-deadline", false);
+ 	return elevator_get(q, "mq-deadline", false);
  }
