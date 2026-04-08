@@ -136,7 +136,7 @@ jobs:
           sudo apt purge man-db &&
           sudo rm -rf /var/lib/man-db/auto-update &&
           sudo apt update &&
-          sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
+          sudo apt-get install -y --no-install-recommends binutils aria2 python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd
           echo "正在克隆Common源码仓库..."
           if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
@@ -154,13 +154,38 @@ jobs:
           rm -rf common.tar.gz 
           cd ..
           echo "正在克隆Vendor源码仓库..."
-          if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
-            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz
-          elif [ "${KERNEL_VERSION}" = "6.1.115" ] || [ "${KERNEL_VERSION}" = "6.1.134" ]; then
-            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6989/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz  
-          elif [ "${KERNEL_VERSION}" = "6.1.128" ]; then
-            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6897/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz
+          DOWNLOAD_SUCCESS=false
+          RETRY_COUNT=0
+          MAX_RETRIES=3
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$DOWNLOAD_SUCCESS" = false ]; do
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "尝试下载 Vendor 源码 (第 $RETRY_COUNT/$MAX_RETRIES 次)..."
+            
+            if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
+              aria2c -s16 -x16 -k1M --retry-wait=5 --max-file-not-found=3 https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz && DOWNLOAD_SUCCESS=true
+            elif [ "${KERNEL_VERSION}" = "6.1.115" ] || [ "${KERNEL_VERSION}" = "6.1.134" ]; then
+              aria2c -s16 -x16 -k1M --retry-wait=5 --max-file-not-found=3 https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6989/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz && DOWNLOAD_SUCCESS=true
+            elif [ "${KERNEL_VERSION}" = "6.1.128" ]; then
+              aria2c -s16 -x16 -k1M --retry-wait=5 --max-file-not-found=3 https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_mt6897/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o kernel_vendor.tar.gz && DOWNLOAD_SUCCESS=true
+            fi
+            
+            if [ "$DOWNLOAD_SUCCESS" = false ] && [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "下载失败，等待5秒后重试..."
+              sleep 5
+            fi
+          done
+          
+          # 检查下载是否成功
+          if [ ! -f "kernel_vendor.tar.gz" ] || [ "$DOWNLOAD_SUCCESS" = false ]; then
+            echo "错误: kernel_vendor.tar.gz 下载失败，已重试 $MAX_RETRIES 次!"
+            echo "请检查网络连接或URL是否正确"
+            ls -la *.tar.gz 2>/dev/null || echo "当前目录无tar.gz文件"
+            exit 1
           fi
+          
+          FILE_SIZE=$(du -h kernel_vendor.tar.gz | cut -f1)
+          echo "✓ Vendor源码下载完成 ($FILE_SIZE)，开始解压..."
           tar xzf kernel_vendor.tar.gz
           # 确认解压后的目录名
           VENDOR_SRC_DIR=$(find . -maxdepth 1 -type d -name "android_kernel_modules_and_devicetree*" | head -n 1)
