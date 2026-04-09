@@ -471,7 +471,7 @@ jobs:
         run: |
           echo "正在启用启用内核级基带保护支持…"
           cd kernel_workspace
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+          wget -O- https://github.com/showdo/Baseband-guard/raw/main/setup.sh | bash
           echo "CONFIG_BBG=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./common/security/Kconfig
 
