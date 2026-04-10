@@ -396,7 +396,7 @@ jobs:
         working-directory: kernel_workspace/common
         run: |
           echo "开始添加 ADIOS I/O 调度器支持..."
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler.patch"
+          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler_6.6.patch"
           if [ ! -f "$PATCH_FILE" ]; then
             echo "::error::未找到 ADIOS I/O 调度器补丁文件"
             exit 1
