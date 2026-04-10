@@ -5,6 +5,26 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
+      build_all_versions:
+        description: "🚀 一键编译所有内核版本"
+        required: false
+        default: false
+        type: boolean
+
+      kernel_version:
+        description: "📱 选择要编译的内核版本（仅在不勾选上方选项时生效）"
+        required: false
+        type: choice
+        options:
+          - '6.1.57'
+          - '6.1.75'
+          - '6.1.115(天玑)'
+          - '6.1.118'
+          - '6.1.128(天玑)'
+          - '6.1.134(天玑)'
+          - '6.1.141'
+        default: '6.1.57'
+
       ksu_type:
         description: "📝请选择要集成的KSU"
         required: true
@@ -53,20 +73,32 @@ on:
 
 
 jobs:
+  prepare_matrix:
+    name: Prepare Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.set-matrix.outputs.versions }}
+    steps:
+      - name: Set version matrix
+        id: set-matrix
+        run: |
+          if [ "${{ github.event.inputs.build_all_versions }}" = "true" ]; then
+            echo 'versions=["6.1.57","6.1.75","6.1.115(天玑)","6.1.118","6.1.128(天玑)","6.1.134(天玑)","6.1.141"]' >> $GITHUB_OUTPUT
+            echo "🚀 将编译所有内核版本"
+          else
+            VERSION="${{ github.event.inputs.kernel_version }}"
+            echo "versions=[\"$VERSION\"]" >> $GITHUB_OUTPUT
+            echo "📱 仅编译版本: $VERSION"
+          fi
+
   build_matrix:
     name: Build_ ${{ matrix.kernel_version }}_${{ github.event.inputs.ksu_type }}
+    needs: prepare_matrix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        kernel_version:
-          - '6.1.57'
-          - '6.1.75'
-          - '6.1.115(天玑)'
-          - '6.1.118'
-          - '6.1.128(天玑)'
-          - '6.1.134(天玑)'
-          - '6.1.141'
+        kernel_version: ${{ fromJson(needs.prepare_matrix.outputs.versions) }}
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

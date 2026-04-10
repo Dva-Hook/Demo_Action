@@ -410,17 +410,31 @@ jobs:
             echo "已自动插入 serialid_check.c 到 main.c"
           fi
 
-      - name: 🔧 Add Re-Kernel Support (添加Re-Kernel支持)
+      - name: 🔧 Add Re-Kernel Support (添加 Re-Kernel 支持)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
-        working-directory: kernel_workspace/common
         run: |
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/Re-Kernel_Support.patch"
-          cp "$PATCH_FILE" ./
-          patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/rk.log || true
-          rm -f Re-Kernel_Support.patch
-          echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
-          echo "✅ Re-Kernel配置已注入"
+            cd kernel_workspace
+            VERSION=$(awk -F'=' '/^VERSION[ \t]*=/ {gsub(/ /,"",$2); print $2}' common/Makefile)
+            PATCHLEVEL=$(awk -F'=' '/^PATCHLEVEL[ \t]*=/ {gsub(/ /,"",$2); print $2}' common/Makefile)
+            echo "内核版本: ${VERSION}.${PATCHLEVEL}"
+            [ ! -d "Re-Kernel" ] && git clone --depth 1 https://github.com/Sakion-Team/Re-Kernel.git
+            RE_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Re-Kernel/LKM-Source"
+            cd common
+            grep -q 'source "drivers/rekernel/Kconfig"' drivers/Kconfig || \
+              sed -i '/endmenu/i source "drivers/rekernel/Kconfig"' drivers/Kconfig
+            grep -q 'obj-$(CONFIG_REKERNEL)' drivers/Makefile || \
+              printf '\n# Re-Kernel\nobj-$(CONFIG_REKERNEL) += rekernel/\n' >> drivers/Makefile
+            mkdir -p drivers/rekernel
+            cp ${RE_DIR}/* drivers/rekernel/
+            TARGET="KERNEL_${VERSION}_${PATCHLEVEL}"
+            if grep -q "$TARGET" drivers/rekernel/rekernel.h; then
+              sed -i "s|^[[:space:]]*//[[:space:]]*#define[[:space:]]\+$TARGET|#define $TARGET|" drivers/rekernel/rekernel.h
+              echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
+              echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
+              echo "✅ Re-Kernel 配置完成"
+            else
+              echo "⚠️ 不支持的内核版本: $TARGET"
+            fi
 
       - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler 支持)
         if: ${{ env.ENABLE_ADIOS == 'true' }}
@@ -475,7 +489,6 @@ jobs:
           echo "CONFIG_BBG=y" >> ./common/arch/arm64/configs/gki_defconfig
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./common/security/Kconfig
 
-          
       - name: ⚙️ Set ${{ env.KSU_TYPE }} (设置${{ env.KSU_TYPE }})
         run: |
           cd kernel_workspace
