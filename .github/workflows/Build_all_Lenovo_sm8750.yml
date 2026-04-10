@@ -1,4 +1,4 @@
-name: Build_all_Lenovo_sm8750
+name: Build_All_Lenovo_sm8750
 permissions:
   contents: read
   actions: write
@@ -753,9 +753,14 @@ jobs:
          name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_${{ env.KSU_TYPE }}_AOSP_Signed
          path: kernel_workspace/boot_avb_tool/AOSP-Testkey-BootSigner-main/boot.img
 
+  upload_rekernel:
+    name: Upload Re-Kernel Module
+    if: ${{ github.event.inputs.enable_ReKernel == 'true' }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
         id: download-rekernel
-        if: ${{ env.ENABLE_REKERNEL == 'true' }}
         uses: actions/github-script@v8
         env:
           KERNEL_MAJOR: "6.6"
@@ -794,8 +799,6 @@ jobs:
             core.setOutput('tag-name', release.data.tag_name);
 
       - name: 📥 Download Re-Kernel module (下载 Re-Kernel 模块)
-        if: ${{ env.ENABLE_REKERNEL == 'true' }}
-        working-directory: kernel_workspace
         env:
           ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
           DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
@@ -814,9 +817,8 @@ jobs:
           ls -lR "$ARTIFACT_NAME"
 
       - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
-        if: ${{ env.ENABLE_REKERNEL == 'true' }}
         uses: actions/upload-artifact@v5
         with:
           name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
-          path: kernel_workspace/Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          path: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
           

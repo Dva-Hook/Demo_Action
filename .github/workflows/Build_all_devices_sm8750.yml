@@ -807,25 +807,72 @@ jobs:
          name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}_SuKiSU
          path: ./AnyKernel3/*
 
-  collect_artifacts:
-    name: Collect_All_Artifacts
-    needs: build_matrix
+  upload_rekernel:
+    name: Upload Re-Kernel Module
+    if: ${{ github.event.inputs.enable_ReKernel == 'true' }}
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Download all artifacts (下载所有构建产物)
-        uses: actions/download-artifact@v5
+      - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
+        id: download-rekernel
+        uses: actions/github-script@v8
+        env:
+          KERNEL_MAJOR: "6.6"
         with:
-          path: ./all_artifacts
-          merge-multiple: false
-      
-      - name: 📦 List all artifacts (列出所有产物)
+          script: |
+            const owner = 'Sakion-Team';
+            const repo = 'Re-Kernel';
+            const kernelMajor = process.env.KERNEL_MAJOR;
+
+            core.info(`正在获取 ${owner}/${repo} 的最新 release...`);
+
+            const release = await github.rest.repos.getLatestRelease({
+              owner,
+              repo,
+            });
+            core.info(`最新版本: ${release.data.tag_name}`);
+            const escapedKernel = kernelMajor.replace(/\./g, '\\.');
+            const pattern = new RegExp(`^Re-Kernel-v[\\d.]+-${escapedKernel}\\.zip$`);
+
+            let targetAsset = null;
+            for (const asset of release.data.assets || []) {
+              if (pattern.test(asset.name)) {
+                targetAsset = asset;
+                break;
+              }
+            }
+
+            if (!targetAsset) {
+              core.setFailed(`未找到匹配的 Re-Kernel 模块资产 (模式: ${pattern.source})`);
+              return;
+            }
+
+            core.info(`找到目标资产: ${targetAsset.name} (${(targetAsset.size / 1024).toFixed(1)} KB)`);
+            core.setOutput('asset-name', targetAsset.name);
+            core.setOutput('download-url', targetAsset.browser_download_url);
+            core.setOutput('tag-name', release.data.tag_name);
+
+      - name: 📥 Download Re-Kernel module (下载 Re-Kernel 模块)
+        env:
+          ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
+          DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
+          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
         run: |
-          echo "=== 所有构建产物列表 ==="
-          find ./all_artifacts -type f | sort
-          echo "========================"
-      
-      - name: 📤 Upload combined artifacts (上传合并后的总包)
+          set -euo pipefail
+          echo "正在下载 Re-Kernel 模块: $ASSET_NAME"
+          echo "下载地址: $DOWNLOAD_URL"
+          aria2c -s16 -x16 -k1M "$DOWNLOAD_URL" -o "$ASSET_NAME"
+          echo "✓ Re-Kernel 模块下载完成"
+          ls -lh "$ASSET_NAME"
+          echo "正在创建目录 $ARTIFACT_NAME 并解压模块..."
+          mkdir -p "$ARTIFACT_NAME"
+          unzip -q "$ASSET_NAME" -d "$ARTIFACT_NAME"
+          echo "✓ 目录结构:"
+          ls -lR "$ARTIFACT_NAME"
+
+      - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
         uses: actions/upload-artifact@v5
         with:
-          name: All_Devices_Build_Artifacts_${{ github.run_id }}
-          path: ./all_artifacts
+          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          path: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          
