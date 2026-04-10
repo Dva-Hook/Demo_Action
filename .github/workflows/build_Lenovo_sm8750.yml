@@ -43,7 +43,7 @@ on:
       enable_ReKernel:
         description: "启用Re-Kernel支持"
         required: false
-        default: false
+        default: true
         type: boolean
       
       enable_Adios:
@@ -339,21 +339,33 @@ jobs:
 
       - name: 🔧 Add Re-Kernel Support (添加 Re-Kernel 支持)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
-        working-directory: kernel_workspace/common
         run: |
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/Re-Kernel_Support.patch"
-          cp "$PATCH_FILE" ./
-          patch -p1 -N --ignore-whitespace -F 3 < Re-Kernel_Support.patch 2>&1 | tee /tmp/rk.log || true
-          rm -f Re-Kernel_Support.patch
-          echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
-          echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
-          echo "✅ Re-Kernel配置已注入"
+          cd kernel_workspace
+          VERSION=$(awk -F'=' '/^VERSION[ \t]*=/ {gsub(/ /,"",$2); print $2}' common/Makefile)
+          PATCHLEVEL=$(awk -F'=' '/^PATCHLEVEL[ \t]*=/ {gsub(/ /,"",$2); print $2}' common/Makefile)
+          echo "VERSION=$VERSION"
+          echo "PATCHLEVEL=$PATCHLEVEL"
+          git clone https://github.com/Sakion-Team/Re-Kernel.git
+          RE_DIR="${GITHUB_WORKSPACE}/kernel_workspace/Re-Kernel/LKM-Source"
+          cd common
+          sed -i '/endmenu/i source "drivers/rekernel/Kconfig"' drivers/Kconfig
+          sed -i '$a \#Re-Kernel Support\nobj-$(CONFIG_REKERNEL) += rekernel/' drivers/Makefile
+          mkdir -p drivers/rekernel
+          cp ${RE_DIR}/* drivers/rekernel/
+          TARGET="KERNEL_${VERSION}_${PATCHLEVEL}"
+          if grep -q "$TARGET" drivers/rekernel/rekernel.h; then
+            sed -i "s|^[[:space:]]*//[[:space:]]*#define[[:space:]]\+$TARGET|#define $TARGET|" drivers/rekernel/rekernel.h
+            echo "CONFIG_REKERNEL=m" >> arch/arm64/configs/gki_defconfig
+            echo "CONFIG_REKERNEL_NETWORK=y" >> arch/arm64/configs/gki_defconfig
+          else
+            echo "⚠️ $TARGET not found in rekernel.h"
+          fi
 
-      - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler 支持)
+      - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler)
         working-directory: kernel_workspace/common
         run: |
           echo "开始添加 ADIOS I/O 调度器支持..."
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler_6.6.patch"
+          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler.patch"
           if [ ! -f "$PATCH_FILE" ]; then
             echo "::error::未找到 ADIOS I/O 调度器补丁文件"
             exit 1
@@ -361,17 +373,17 @@ jobs:
           if [ -f "block/adios.c" ]; then
             echo "✓ ADIOS I/O 调度器文件已存在，跳过应用补丁"
           else
-            cp "$PATCH_FILE" ./adios_ioscheduler_6.6.patch
+            cp "$PATCH_FILE" ./adios_ioscheduler.patch
             echo "正在应用 ADIOS I/O 调度器补丁..."
-            if patch -p1 --ignore-whitespace -F 3 < adios_ioscheduler_6.6.patch 2>&1 | tee /tmp/adios_patch.log; then
+            if patch -p1 --ignore-whitespace -F 3 < adios_ioscheduler.patch 2>&1 | tee /tmp/adios_patch.log; then
               echo "✓ ADIOS I/O 调度器补丁应用成功"
             else
               echo "::warning::ADIOS 补丁应用出现问题"
               if grep -q "malformed patch" /tmp/adios_patch.log; then
-                patch -p1 --force --ignore-whitespace < adios_ioscheduler_6.6.patch || true
+                patch -p1 --force --ignore-whitespace < adios_ioscheduler.patch || true
               fi
             fi
-            rm -f adios_ioscheduler_6.6.patch
+            rm -f adios_ioscheduler.patch
           fi
           if ! grep -q "CONFIG_MQ_IOSCHED_ADIOS" arch/arm64/configs/gki_defconfig; then
             echo "CONFIG_MQ_IOSCHED_ADIOS=y" >> arch/arm64/configs/gki_defconfig
@@ -419,7 +431,7 @@ jobs:
               echo "当前提交哈希: $GIT_COMMIT_HASH"
               export KSU_VERSION=$KSU_VERSION
               for i in {1..3}; do
-                KSU_API_VERSION=$(curl -s "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/builtin/kernel/Kbuild" | 
+                KSU_API_VERSION=$(curl -s "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/builtin/kernel/Makefile" | 
                   grep -m1 "KSU_VERSION_API :=" | 
                   awk -F'= ' '{print $2}' | 
                   tr -d '[:space:]')
@@ -429,19 +441,19 @@ jobs:
               echo "KSU_API_VERSION=$KSU_API_VERSION" >> $GITHUB_ENV
               VERSION_DEFINITIONS=$'define get_ksu_version_full\nv\\$1-'"$GIT_COMMIT_HASH"$'-TG@qdykernel\nendef\n\nKSU_VERSION_API := '"$KSU_API_VERSION"$'\nKSU_VERSION_FULL := v'"$KSU_API_VERSION"$'-'"$GIT_COMMIT_HASH"$'-TG@qdykernel'
               
-              sed -i '/define get_ksu_version_full/,/endef/d' kernel/Kbuild
-              sed -i '/KSU_VERSION_API :=/d' kernel/Kbuild
-              sed -i '/KSU_VERSION_FULL :=/d' kernel/Kbuild
+              sed -i '/define get_ksu_version_full/,/endef/d' kernel/Makefile
+              sed -i '/KSU_VERSION_API :=/d' kernel/Makefile
+              sed -i '/KSU_VERSION_FULL :=/d' kernel/Makefile
               awk -v def="$VERSION_DEFINITIONS" '
                 /REPO_OWNER :=/ {print; print def; inserted=1; next}
                 1
                 END {if (!inserted) print def}
-              ' kernel/Kbuild > kernel/Kbuild.tmp && mv kernel/Kbuild.tmp kernel/Kbuild
+              ' kernel/Makefile > kernel/Makefile.tmp && mv kernel/Makefile.tmp kernel/Makefile
               KSU_VERSION=$(expr $(git rev-list --count main) + 37185 2>/dev/null || echo 114514)
               echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
               echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
-              grep -A10 "REPO_OWNER" kernel/Kbuild
-              grep "KSU_VERSION_FULL" kernel/Kbuild
+              grep -A10 "REPO_OWNER" kernel/Makefile
+              grep "KSU_VERSION_FULL" kernel/Makefile
               echo "SukiSU版本号: v${KSU_API_VERSION}-${GIT_COMMIT_HASH}-TG@qdykernel"
             fi
 
@@ -618,7 +630,7 @@ jobs:
         if: env.BUILD_TIME > 480
         uses: actions/github-script@v8
         env:
-          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}-
+          PREFIX: ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}
           CURRENT_KEY: ccache-${{ env.KSU_TYPE }}-${{ env.KERNEL_VERSION }}-${{ github.run_id }}
         with:
           script: |
@@ -709,6 +721,7 @@ jobs:
         with:
          name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_${{ env.KSU_TYPE }}_AOSP_Signed
          path: kernel_workspace/boot_avb_tool/AOSP-Testkey-BootSigner-main/boot.img
+
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
         id: download-rekernel
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
