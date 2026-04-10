@@ -726,7 +726,7 @@ jobs:
       - name: 📤 Upload Image (上传 Image)
         uses: actions/upload-artifact@v5
         with:
-         name: kernel_image
+         name: kernel_image_${{ env.KERNEL_VERSION }}
          path: kernel_workspace/common/out/arch/arm64/boot/kernel
          
       - name: 📦 Sign boot using AOSP test key (使用AOSP测试密钥签名boot)
