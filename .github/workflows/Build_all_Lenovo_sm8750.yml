@@ -796,13 +796,17 @@ jobs:
             core.info(`找到目标资产: ${targetAsset.name} (${(targetAsset.size / 1024).toFixed(1)} KB)`);
             core.setOutput('asset-name', targetAsset.name);
             core.setOutput('download-url', targetAsset.browser_download_url);
+            const versionMatch = targetAsset.name.match(/^Re-Kernel-v([\d.]+)-/);
+            const version = versionMatch ? versionMatch[1] : release.data.tag_name;
+            core.setOutput('version', version);
             core.setOutput('tag-name', release.data.tag_name);
 
       - name: 📥 Download Re-Kernel module (下载 Re-Kernel 模块)
         env:
           ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
           DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
-          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          VERSION: ${{ steps.download-rekernel.outputs.version }}
+          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.version }}-6.6
         run: |
           set -euo pipefail
           echo "正在下载 Re-Kernel 模块: $ASSET_NAME"
@@ -819,6 +823,6 @@ jobs:
       - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
         uses: actions/upload-artifact@v5
         with:
-          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
-          path: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.6
+          name: Re-Kernel-v${{ steps.download-rekernel.outputs.version }}-6.6
+          path: Re-Kernel-v${{ steps.download-rekernel.outputs.version }}-6.6
           
