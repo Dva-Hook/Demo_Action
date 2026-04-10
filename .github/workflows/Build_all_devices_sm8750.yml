@@ -810,7 +810,7 @@ jobs:
   upload_rekernel:
     name: Upload Re-Kernel Module
     if: ${{ github.event.inputs.enable_ReKernel == 'true' }}
-    needs: build
+    needs: build_matrix
     runs-on: ubuntu-latest
     steps:
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
