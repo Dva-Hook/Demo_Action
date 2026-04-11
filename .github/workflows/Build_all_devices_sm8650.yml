@@ -727,7 +727,7 @@ jobs:
   upload_rekernel:
     name: Upload Re-Kernel Module
     if: ${{ github.event.inputs.enable_ReKernel == 'true' }}
-    needs: build_matrix
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
@@ -749,12 +749,15 @@ jobs:
             });
             core.info(`最新版本: ${release.data.tag_name}`);
             const escapedKernel = kernelMajor.replace(/\./g, '\\.');
-            const pattern = new RegExp(`^Re-Kernel-v[\\d.]+-${escapedKernel}\\.zip$`);
+            const pattern = new RegExp(`^Re-Kernel-v([\\d.]+)-${escapedKernel}\\.zip$`);
 
             let targetAsset = null;
+            let versionNumber = '';
             for (const asset of release.data.assets || []) {
-              if (pattern.test(asset.name)) {
+              const match = asset.name.match(pattern);
+              if (match) {
                 targetAsset = asset;
+                versionNumber = match[1]; // 提取版本号部分
                 break;
               }
             }
@@ -764,20 +767,22 @@ jobs:
               return;
             }
 
-            core.info(`找到目标资产: ${targetAsset.name} (${(targetAsset.size / 1024).toFixed(1)} KB)`);
+            core.info(`找到目标资产: ${targetAsset.name} (版本: ${versionNumber}, ${(targetAsset.size / 1024).toFixed(1)} KB)`);
             core.setOutput('asset-name', targetAsset.name);
             core.setOutput('download-url', targetAsset.browser_download_url);
-            core.setOutput('tag-name', release.data.tag_name);
+            core.setOutput('version-number', versionNumber);
 
       - name: 📥 Download Re-Kernel module (下载 Re-Kernel 模块)
         env:
           ASSET_NAME: ${{ steps.download-rekernel.outputs.asset-name }}
           DOWNLOAD_URL: ${{ steps.download-rekernel.outputs.download-url }}
-          ARTIFACT_NAME: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
+          VERSION_NUMBER: ${{ steps.download-rekernel.outputs.version-number }}
         run: |
           set -euo pipefail
+          ARTIFACT_NAME="Re-Kernel-v${VERSION_NUMBER}-6.1"
           echo "正在下载 Re-Kernel 模块: $ASSET_NAME"
           echo "下载地址: $DOWNLOAD_URL"
+          echo "Artifact 名称: $ARTIFACT_NAME"
           aria2c -s16 -x16 -k1M "$DOWNLOAD_URL" -o "$ASSET_NAME"
           echo "✓ Re-Kernel 模块下载完成"
           ls -lh "$ASSET_NAME"
@@ -790,6 +795,5 @@ jobs:
       - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
         uses: actions/upload-artifact@v5
         with:
-          name: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
-          path: Re-Kernel-v${{ steps.download-rekernel.outputs.tag-name }}-6.1
-          
+          name: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}-6.1
+          path: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}-6.1
