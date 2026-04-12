@@ -73,7 +73,7 @@ jobs:
           sudo apt update &&
           sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full zstd &
           echo "正在克隆源码仓库..."
-          aria2c -s16 -x16 -k1M https://github.com/Dva-Hook/android_kernel_common_oneplus_sm8750/archive/refs/heads/6.6-final.zip -o common.zip
+          aria2c -s16 -x16 -k1M https://github.com/brokestar233/android_kernel_common_oneplus_sm8750/archive/refs/heads/6.6-final.zip -o common.zip
           unzip -q common.zip && 
           mv "android_kernel_common_oneplus_sm8750-6.6-final" common
           rm -rf common.zip 
