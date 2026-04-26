@@ -19,6 +19,7 @@ on:
           - '6.6.56'
           - '6.6.89'
           - '6.6.102'
+          - '6.6.118'
         default: '6.6.89'
 
       ksu_type:
@@ -89,7 +90,7 @@ jobs:
         id: set-matrix
         run: |
           if [ "${{ github.event.inputs.build_all_versions }}" = "true" ]; then
-            echo 'versions=["6.6.56","6.6.89","6.6.102"]' >> $GITHUB_OUTPUT
+            echo 'versions=["6.6.56","6.6.89","6.6.102","6.6.118"]' >> $GITHUB_OUTPUT
             echo "🚀 将编译所有内核版本"
           else
             VERSION="${{ github.event.inputs.kernel_version }}"
@@ -137,6 +138,10 @@ jobs:
               echo "os_patch_level=2025-10" >> $GITHUB_ENV
               echo "releases=TB322FC_1.5.10.096" >> $GITHUB_ENV
               ;;
+            "6.6.118")
+              echo "os_patch_level=2026-01" >> $GITHUB_ENV
+              echo "releases=TB322_ZUXOS_1.5.10.183" >> $GITHUB_ENV
+              ;;
           esac
            if [ -z "${{ env.CUSTOM_KERNEL_SUFFIX }}" ]; then
             case "${{ env.KERNEL_VERSION }}" in
@@ -148,6 +153,9 @@ jobs:
                 ;;
               "6.6.102")
                 DEFAULT_SUFFIX='-android15-8-g06bc416365ef-ab14559830-4k'
+                ;;
+              "6.6.118")
+                DEFAULT_SUFFIX='-android15-8-g350f378eb496-ab14943902-4k'
                 ;;
             esac
             echo "DEFAULT_SUFFIX=$DEFAULT_SUFFIX" >> $GITHUB_ENV
@@ -166,6 +174,9 @@ jobs:
                 ;;
               6.6.102)
                 KERNEL_TIME='Tue Dec 9 15:43:22 UTC 2025'
+                ;;
+              6.6.102)
+                KERNEL_TIME='Thu Feb 26 02:40:50 UTC 2026'
                 ;;
             esac
             echo "KERNEL_TIME=$KERNEL_TIME" >> $GITHUB_ENV
