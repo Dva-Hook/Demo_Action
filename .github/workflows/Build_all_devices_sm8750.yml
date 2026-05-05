@@ -584,6 +584,7 @@ jobs:
           
       - name: 🔧 Add Droidspaces Support (添加 Droidspaces 支持)
         if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
+        working-directory: kernel_workspace/common
         run: |
           if [ "${{ env.DEVICES_NAME }}" = "oneplus_ace5_ultra" ] || [ "${{ env.DEVICES_NAME }}" = "realme_GT7" ]; then
             echo "::warning::天玑(MTK)机型暂不支持 Droidspaces，跳过配置"
