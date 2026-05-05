@@ -71,6 +71,12 @@ on:
         default: true
         type: boolean
       
+      enable_droidspaces:
+        description: "添加 Droidspaces（容器化/DroidRun） 支持 注：天玑无法使用"
+        required: true
+        default: false
+        type: boolean
+      
       enable_serialid_check:
         description: "添加SerialID校验"
         required: true
@@ -121,6 +127,7 @@ jobs:
       ENABLE_SCX:             ${{ github.event.inputs.enable_scx }}
       ENABLE_BBG:             ${{ github.event.inputs.enable_bbg }}
       ENABLE_SERIALID_CHECK:  ${{ github.event.inputs.enable_serialid_check }}
+      ENABLE_DROIDSPACES:     ${{ github.event.inputs.enable_droidspaces }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
     outputs:
       ksuver: ${{ steps.ksu_step.outputs.ksuver }}
@@ -574,8 +581,28 @@ jobs:
           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
           patch -p1 -N -F 3 < 69_hide_stuff.patch || true
           echo "[OK] SUSFS 补丁处理流程全部完成"
+          
+      - name: 🔧 Add Droidspaces Support (添加 Droidspaces 支持)
+        if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
+        run: |
+          if [ "${{ env.DEVICES_NAME }}" = "oneplus_ace5_ultra" ] || [ "${{ env.DEVICES_NAME }}" = "realme_GT7" ]; then
+            echo "::warning::天玑(MTK)机型暂不支持 Droidspaces，跳过配置"
+            echo "ENABLE_DROIDSPACES='false'" >> $GITHUB_ENV
+          else
+            echo "开始添加 Droidspaces 支持..."
+            echo "正在下载并应用官方 KABI 修复补丁..."
+            wget -O droidspaces.patch https://raw.githubusercontent.com/ravindu644/Droidspaces-OSS/main/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch
+            patch -p1 --ignore-whitespace < droidspaces.patch || { echo "::error::Droidspaces 补丁应用失败"; exit 1; }
+            
+            echo "✓ Droidspaces 支持配置完成"
 
+          fi
 
+      - name: 🔧 Add Droidspaces Support (添加 Droidspaces 支持)
+        if: ${{ env.ENABLE_DROIDSPACES == 'true' && env.SKIP_DROIDSPACES == 'false' }}
+        working-directory: kernel_workspace/common
+        run: |
+          
 
           
       - name: 🔧 Set gki_defconfig (设置编译配置) 
@@ -607,7 +634,22 @@ jobs:
           else
             echo "未启用SUSFS 跳过SUSFS配置"
           fi
-          
+          if [ "${{ env.ENABLE_DROIDSPACES }}" == 'true' ];then
+            echo "应用Droidspaces推荐配置"
+            echo "CONFIG_SYSVIPC=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_POSIX_MQUEUE=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_IPC_NS=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_PID_NS=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_DEVTMPFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_TARGET_REJECT=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_TARGET_LOG=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_MATCH_RECENT=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_IP_SET=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_IP_SET_HASH_IP=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_IP_SET_HASH_NET=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_SET=y" >> ./common/arch/arm64/configs/gki_defconfig
+          fi
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
 
