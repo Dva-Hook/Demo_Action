@@ -173,7 +173,8 @@ jobs:
           wget https://github.com/cctv18/oppo_oplus_realme_sm8650/raw/refs/heads/main/lib/ccache-x86-64 -O ccache &&
           sudo cp -f ./ccache /usr/bin/ccache &&
           sudo chmod +x /usr/bin/ccache &&
-          rm -f ./ccache &echo "正在克隆Common源码仓库..."
+          rm -f ./ccache &
+          echo "正在克隆Common源码仓库..."
           if [ "${KERNEL_VERSION}" = "6.1.57" ] || [ "${KERNEL_VERSION}" = "6.1.75" ] || [ "${KERNEL_VERSION}" = "6.1.118" ] || [ "${KERNEL_VERSION}" = "6.1.141" ]; then
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8650/archive/refs/heads/oneplus/${REPO_MANIFEST}.tar.gz -o common.tar.gz
             tar xzf common.tar.gz && 
