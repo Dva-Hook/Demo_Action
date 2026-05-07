@@ -582,18 +582,55 @@ jobs:
           patch -p1 -N -F 3 < 69_hide_stuff.patch || true
           echo "[OK] SUSFS 补丁处理流程全部完成"
           
-      - name: 🔧 Add Droidspaces Support (添加 Droidspaces 支持)
+      - name: 🔧 Add Droidspaces Support
         if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
         working-directory: kernel_workspace/common
+        shell: bash
         run: |
-          if [ "${{ env.DEVICES_NAME }}" = "oneplus_ace5_ultra" ] || [ "${{ env.DEVICES_NAME }}" = "realme_GT7" ]; then
-            echo "::warning::天玑(MTK)机型暂不支持 Droidspaces，跳过配置"
-            echo "ENABLE_DROIDSPACES='false'" >> $GITHUB_ENV
-          else
-            echo "开始添加 Droidspaces 支持..."
-            wget https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/OKI/6.6/Kernel_6.6.patch
-            patch -p1 < 'Kernel_6.6.patch'"
-          fi
+          set -euo pipefail
+          case "${{ env.DEVICES_NAME }}" in
+            oneplus_ace5_ultra|realme_GT7)
+              echo "::warning::MTK 机型暂不支持 Droidspaces，已跳过"
+              echo "ENABLE_DROIDSPACES=false" >> "$GITHUB_ENV"
+              exit 0
+              ;;
+          esac
+          echo "==> 开始添加 Droidspaces 支持"
+          BASE_URL="https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main"
+          PATCHES=(
+            "OKI/6.6/Kernel_6.6.patch"
+            "NTsync/ntsync_base.patch"
+            "NTsync/ntsync_compat_android15-6.6.patch"
+          )
+          apply_patch() {
+            local patch_path="$1"
+            local patch_file
+
+            patch_file="$(basename "$patch_path")"
+
+            echo "==> 下载: $patch_file"
+
+            curl -fsSL \
+              "$BASE_URL/$patch_path" \
+              -o "$patch_file"
+
+            echo "==> 应用: $patch_file"
+
+            if patch -p1 --forward < "$patch_file"; then
+              echo "==> Patch 应用成功"
+            else
+              echo "::error::Patch 应用失败: $patch_file"
+              exit 1
+            fi
+
+            rm -f "$patch_file"
+          }
+
+          for patch in "${PATCHES[@]}"; do
+            apply_patch "$patch"
+          done
+
+          echo "==> Droidspaces + NTsync 添加完成"
           
 
           
@@ -641,6 +678,7 @@ jobs:
             echo "CONFIG_IP_SET_HASH_IP=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_IP_SET_HASH_NET=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_NETFILTER_XT_SET=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NTSYNC=y" >> ./common/arch/arm64/configs/gki_defconfig
           fi
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
