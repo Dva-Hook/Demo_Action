@@ -507,7 +507,7 @@ jobs:
         working-directory: kernel_workspace/common
         run: |
           echo "开始添加 ADIOS I/O 调度器支持..."
-          PATCH_FILE="${GITHUB_WORKSPACE}/.github/workflows/tools/adios_ioscheduler_6.6.patch"
+          PATCH_FILE="${GITHUB_WORKSPACE}/patch/adios_ioscheduler_6.6.patch"
           if [ ! -f "$PATCH_FILE" ]; then
             echo "::error::未找到 ADIOS I/O 调度器补丁文件"
             exit 1
@@ -617,51 +617,39 @@ jobs:
       - name: 🔧 Add Droidspaces Support
         if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
         working-directory: kernel_workspace/common
-        shell: bash
         run: |
-          set -euo pipefail
-          case "${{ env.DEVICES_NAME }}" in
+          case "$${{ env.DEVICES_NAME }}" in
             oneplus_ace5_ultra|realme_GT7)
               echo "::warning::MTK 机型暂不支持 Droidspaces，已跳过"
               echo "ENABLE_DROIDSPACES=false" >> "$GITHUB_ENV"
               exit 0
               ;;
           esac
-          echo "==> 开始添加 Droidspaces 支持"
-          BASE_URL="https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main"
+          echo "==> 开始添加 Droidspaces + NTsync 支持"
           PATCHES=(
-            "OKI/6.6/Kernel_6.6.patch"
-            "NTsync/ntsync_base.patch"
-            "NTsync/ntsync_compat_android15-6.6.patch"
+            "Droidspaces_6.6.patch"
+            "ntsync_base.patch"
+            "ntsync_compat_6.6.patch"
           )
           apply_patch() {
-            local patch_path="$1"
-            local patch_file
+            local patch_file="$1"
+            local patch_path="${GITHUB_WORKSPACE}/patch/${patch_file}"
 
-            patch_file="$(basename "$patch_path")"
-
-            echo "==> 下载: $patch_file"
-
-            curl -fsSL \
-              "$BASE_URL/$patch_path" \
-              -o "$patch_file"
-
-            echo "==> 应用: $patch_file"
-
-            if patch -p1 --forward < "$patch_file"; then
-              echo "==> Patch 应用成功"
+            if [ ! -f "$patch_path" ]; then
+              echo "::error::Patch 不存在: $patch_path"
+              exit 1
+            fi
+            echo "==> 正在应用: $patch_file"
+            if patch -p1 --forward < "$patch_path"; then
+              echo "==> Patch 应用成功: $patch_file"
             else
               echo "::error::Patch 应用失败: $patch_file"
               exit 1
             fi
-
-            rm -f "$patch_file"
           }
-
           for patch in "${PATCHES[@]}"; do
             apply_patch "$patch"
           done
-
           echo "==> Droidspaces + NTsync 添加完成"
           
 
