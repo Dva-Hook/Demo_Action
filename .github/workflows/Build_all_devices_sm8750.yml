@@ -614,23 +614,26 @@ jobs:
           patch -p1 -N -F 3 < 69_hide_stuff.patch || true
           echo "[OK] SUSFS 补丁处理流程全部完成"
           
-      - name: 🔧 Add Droidspaces Support
+      - name: 🔧 Add Droidspaces Support (添加 Droidspaces 支持)
         if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
         working-directory: kernel_workspace/common
         run: |
-          # case "$${{ env.DEVICES_NAME }}" in
-          #   oneplus_ace5_ultra|realme_GT7)
-          #     echo "::warning::MTK 机型暂不支持 Droidspaces，已跳过"
-          #     echo "ENABLE_DROIDSPACES=false" >> "$GITHUB_ENV"
-          #     exit 0
-          #     ;;
-          # esac
-          echo "==> 开始添加 Droidspaces + NTsync 支持"
+          echo "==> 开始添加 Droidspaces 支持"
           PATCHES=(
             "Droidspaces_6.6.patch"
-            # "ntsync_base.patch"
-            # "ntsync_compat_6.6.patch"
           )
+          case "${{ env.DEVICES_NAME }}" in
+            oneplus_ace5_ultra|realme_GT7)
+              echo "::warning::${{ env.DEVICES_NAME }} 跳过 NTsync patch，仅应用 Droidspaces_6.6.patch"
+              ;;
+            *)
+              echo "==> 当前机型支持 NTsync，追加 NTsync patches"
+              PATCHES+=(
+                "ntsync_base.patch"
+                "ntsync_compat_6.6.patch"
+              )
+              ;;
+          esac
           apply_patch() {
             local patch_file="$1"
             local patch_path="${GITHUB_WORKSPACE}/patch/${patch_file}"
@@ -650,7 +653,7 @@ jobs:
           for patch in "${PATCHES[@]}"; do
             apply_patch "$patch"
           done
-          echo "==> Droidspaces + NTsync 添加完成"
+          echo "==> Droidspaces patch 添加完成"
           
 
           
