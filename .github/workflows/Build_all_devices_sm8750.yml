@@ -618,13 +618,13 @@ jobs:
         if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
         working-directory: kernel_workspace/common
         run: |
-          case "$${{ env.DEVICES_NAME }}" in
-            oneplus_ace5_ultra|realme_GT7)
-              echo "::warning::MTK 机型暂不支持 Droidspaces，已跳过"
-              echo "ENABLE_DROIDSPACES=false" >> "$GITHUB_ENV"
-              exit 0
-              ;;
-          esac
+          # case "$${{ env.DEVICES_NAME }}" in
+          #   oneplus_ace5_ultra|realme_GT7)
+          #     echo "::warning::MTK 机型暂不支持 Droidspaces，已跳过"
+          #     echo "ENABLE_DROIDSPACES=false" >> "$GITHUB_ENV"
+          #     exit 0
+          #     ;;
+          # esac
           echo "==> 开始添加 Droidspaces + NTsync 支持"
           PATCHES=(
             "Droidspaces_6.6.patch"
