@@ -628,8 +628,8 @@ jobs:
           echo "==> 开始添加 Droidspaces + NTsync 支持"
           PATCHES=(
             "Droidspaces_6.6.patch"
-            "ntsync_base.patch"
-            "ntsync_compat_6.6.patch"
+            # "ntsync_base.patch"
+            # "ntsync_compat_6.6.patch"
           )
           apply_patch() {
             local patch_file="$1"
