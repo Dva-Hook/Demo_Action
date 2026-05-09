@@ -619,40 +619,21 @@ jobs:
         working-directory: kernel_workspace/common
         run: |
           echo "==> 开始添加 Droidspaces 支持"
-          PATCHES=(
-            "Droidspaces_6.6.patch"
-          )
-          case "${{ env.DEVICES_NAME }}" in
-            oneplus_ace5_ultra|realme_GT7)
-              echo "::warning::${{ env.DEVICES_NAME }} 跳过 NTsync patch，仅应用 Droidspaces_6.6.patch"
-              ;;
-            *)
-              echo "==> 当前机型支持 NTsync，追加 NTsync patches"
-              PATCHES+=(
-                "ntsync_base.patch"
-                "ntsync_compat_6.6.patch"
-              )
-              ;;
-          esac
-          apply_patch() {
-            local patch_file="$1"
-            local patch_path="${GITHUB_WORKSPACE}/patch/${patch_file}"
-
-            if [ ! -f "$patch_path" ]; then
-              echo "::error::Patch 不存在: $patch_path"
-              exit 1
-            fi
-            echo "==> 正在应用: $patch_file"
-            if patch -p1 --forward < "$patch_path"; then
-              echo "==> Patch 应用成功: $patch_file"
-            else
-              echo "::error::Patch 应用失败: $patch_file"
-              exit 1
-            fi
-          }
-          for patch in "${PATCHES[@]}"; do
-            apply_patch "$patch"
-          done
+          patch_file="Droidspaces_6.6.patch"
+          patch_path="${GITHUB_WORKSPACE}/patch/${patch_file}"
+          
+          if [ ! -f "$patch_path" ]; then
+            echo "::error::Patch 不存在: $patch_path"
+            exit 1
+          fi
+          
+          echo "==> 正在应用: $patch_file"
+          if patch -p1 --forward < "$patch_path"; then
+            echo "==> Patch 应用成功: $patch_file"
+          else
+            echo "::error::Patch 应用失败: $patch_file"
+            exit 1
+          fi
           echo "==> Droidspaces patch 添加完成"
           
 
