@@ -72,7 +72,7 @@ on:
         type: boolean
       
       enable_droidspaces:
-        description: "添加 Droidspaces（容器化/DroidRun） 支持 注：天玑无法使用"
+        description: "添加 Droidspaces"
         required: true
         default: false
         type: boolean
