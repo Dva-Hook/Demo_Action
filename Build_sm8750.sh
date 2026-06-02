@@ -16,18 +16,34 @@ KERNEL_WORKSPACE="$ROOT_DIR/kernel_workspace"
 #######################################
 KSU_TYPE="ReSukiSU"
 DEVICES_NAME="oneplus_ace5_pro"
+BUILD_ALL_DEVICES="false"
 CUSTOM_KERNEL_SUFFIX=""
 CUSTOM_KERNEL_TIME=""
 ENABLE_REKERNEL="false"
 ENABLE_ADIOS="true"
 ENABLE_SCX="true"
 ENABLE_BBG="true"
+ENABLE_DROIDSPACES="false"
 ENABLE_SERIALID_CHECK="true"
 ENABLE_SUSFS="true"
 
 JOBS="$(nproc --all)"
-CCACHE_DIR="${HOME}/.ccache_local_oneplus"
+CCACHE_DIR=""
+CCACHE_DIR_OVERRIDE=""
 CCACHE_MAXSIZE="10G"
+OUTPUT_DIR="$ROOT_DIR/output"
+ALL_DEVICES=(
+  oneplus_13
+  oneplus_ace5_pro
+  oneplus_ace_6
+  oneplus_13t
+  oneplus_pad_2_pro
+  oneplus_ace5_ultra
+  realme_GT7
+  realme_GT7pro
+  realme_GT7pro_Speed
+  realme_GT8
+)
 
 #######################################
 # 帮助信息

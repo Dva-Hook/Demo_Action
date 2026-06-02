@@ -561,9 +561,9 @@ jobs:
           cd kernel_workspace
           echo "正在配置${{ env.KSU_TYPE }}..."
           if [ "${{ env.KSU_TYPE }}" == 'ReSukiSU' ]; then
-            curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/sync-upstream/kernel/setup.sh" | bash -s sync-upstream
+            curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s dev
             cd ./KernelSU 
-            KSU_VERSION=$(expr $(git rev-list --count main) + 30700 2>/dev/null || echo 114514)
+            KSU_VERSION=$(expr $(git rev-list --count dev) + 30700 2>/dev/null || echo 114514)
             echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
             echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
           else
