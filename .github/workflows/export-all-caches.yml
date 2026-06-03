@@ -96,10 +96,17 @@ jobs:
           CACHE_SCOPE="${CACHE_BODY%-${RUN_ID}}"
           KSU_TYPE="${CACHE_SCOPE%%-*}"
           TARGET="${CACHE_SCOPE#${KSU_TYPE}-}"
-          CCACHE_DIR="$HOME/.ccache_${KSU_TYPE}_${TARGET}"
+          # TARGET 可能包含缓存变体后缀（如 -ds），上传文件名保留它，
+          # 但 CCACHE_DIR 必须与构建时的路径一致（不含变体后缀）
+          CCACHE_TARGET="${TARGET}"
+          for variant in "-ds"; do
+            if [[ "$CCACHE_TARGET" == *"${variant}" ]]; then
+              CCACHE_TARGET="${CCACHE_TARGET%${variant}}"
+            fi
+          done
+          CCACHE_DIR="$HOME/.ccache_${KSU_TYPE}_${CCACHE_TARGET}"
           ARCHIVE_NAME="${CACHE_KEY}.tar.zst"
-          
-          # 确保TARGET中的中文括号等字符正确传递
+
           echo "CACHE_KEY=$CACHE_KEY" >> "$GITHUB_ENV"
           echo "KSU_TYPE=$KSU_TYPE" >> "$GITHUB_ENV"
           echo "TARGET=$TARGET" >> "$GITHUB_ENV"
@@ -108,7 +115,7 @@ jobs:
 
           echo "正在处理: $CACHE_KEY"
           echo "KSU类型: $KSU_TYPE"
-          echo "目标: $TARGET"
+          echo "上传目标: $TARGET"
           echo "缓存目录: $CCACHE_DIR"
 
       - name: 安装打包工具
