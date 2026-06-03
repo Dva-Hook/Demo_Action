@@ -20,6 +20,7 @@ on:
           - 'oneplus_ace5_pro'
           - 'oneplus_ace_6'
           - 'oneplus_13t'
+          - 'oneplus_pad_2'
           - 'oneplus_pad_2_pro'
           - 'oneplus_ace5_ultra'
           - 'realme_GT7'
@@ -153,6 +154,11 @@ jobs:
               echo "IMAGENAME=Image_Op_Pad_2_Pro_New" >> $GITHUB_ENV
               echo "SCHED_FILE=oneplus_pad_2_pro_b" >> $GITHUB_ENV
               ;;
+            oneplus_pad_2)
+              echo "REPO_MANIFEST=mt6991_b_16.0.0_pad_2" >> $GITHUB_ENV
+              echo "IMAGENAME=Image_Op_Pad_2" >> $GITHUB_ENV
+              echo "SCHED_FILE=oneplus_pad2_mt6991_b" >> $GITHUB_ENV
+              ;;
             oneplus_ace5_ultra)
               echo "REPO_MANIFEST=mt6991_b_16.0.0_oneplus_ace5_ultra" >> $GITHUB_ENV
               echo "IMAGENAME=Image_Op_Ace_5_Ultra" >> $GITHUB_ENV
@@ -183,7 +189,7 @@ jobs:
             oneplus_ace5_ultra)
                 DEFAULT_SUFFIX='-android15-8-ge6068c2aa11d-abogki454747580-4k'
               ;;
-            oneplus_13 | oneplus_13t | oneplus_ace5_pro | oneplus_ace_6 | realme_GT7 | realme_GT7pro_Speed | realme_GT8)
+            oneplus_13 | oneplus_13t | oneplus_ace5_pro | oneplus_ace_6 | oneplus_pad_2 | realme_GT7 | realme_GT7pro_Speed | realme_GT8)
                 DEFAULT_SUFFIX='-android15-8-g7e1f3c083cc6-abogki467167594-4k'
               ;;
             realme_GT7pro)
@@ -209,7 +215,7 @@ jobs:
               oneplus_ace5_ultra)
                   KERNEL_TIME='Tue Jul 1 19:48:18 UTC 2025'
                 ;;
-              oneplus_13 | oneplus_13t | oneplus_ace5_pro | oneplus_ace_6 | realme_GT7 | realme_GT7pro_Speed | realme_GT8)
+              oneplus_13 | oneplus_13t | oneplus_ace5_pro | oneplus_ace_6 | oneplus_pad_2 |realme_GT7 | realme_GT7pro_Speed | realme_GT8)
                   KERNEL_TIME='Mon Dec 8 04:00:43 UTC 2025'
                 ;;
               realme_GT7pro)

@@ -91,11 +91,11 @@ jobs:
         run: |
           set -euo pipefail
           CACHE_KEY='${{ matrix.cache_key }}'
+          # 格式: ccache-{TARGET}[变体]-{RUN_ID}
+          # 例: ccache-6.6.102-ds-26859202910 或 ccache-oneplus_13-26859202910
           CACHE_BODY="${CACHE_KEY#ccache-}"
           RUN_ID="${CACHE_BODY##*-}"
-          CACHE_SCOPE="${CACHE_BODY%-${RUN_ID}}"
-          KSU_TYPE="${CACHE_SCOPE%%-*}"
-          TARGET="${CACHE_SCOPE#${KSU_TYPE}-}"
+          TARGET="${CACHE_BODY%-${RUN_ID}}"
           # TARGET 可能包含缓存变体后缀（如 -ds），上传文件名保留它，
           # 但 CCACHE_DIR 必须与构建时的路径一致（不含变体后缀）
           CCACHE_TARGET="${TARGET}"
@@ -104,17 +104,15 @@ jobs:
               CCACHE_TARGET="${CCACHE_TARGET%${variant}}"
             fi
           done
-          CCACHE_DIR="$HOME/.ccache_${KSU_TYPE}_${CCACHE_TARGET}"
+          CCACHE_DIR="$HOME/.ccache_${CCACHE_TARGET}"
           ARCHIVE_NAME="${CACHE_KEY}.tar.zst"
 
           echo "CACHE_KEY=$CACHE_KEY" >> "$GITHUB_ENV"
-          echo "KSU_TYPE=$KSU_TYPE" >> "$GITHUB_ENV"
           echo "TARGET=$TARGET" >> "$GITHUB_ENV"
           echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
           echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
 
           echo "正在处理: $CACHE_KEY"
-          echo "KSU类型: $KSU_TYPE"
           echo "上传目标: $TARGET"
           echo "缓存目录: $CCACHE_DIR"
 
