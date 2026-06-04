@@ -629,6 +629,7 @@ jobs:
               exit 1
             fi
             echo "  应用: $PATCH_NAME"
+            dos2unix "$PATCH_PATH"
             if ! patch -p1 --forward < "$PATCH_PATH"; then
               echo "::warning::补丁 $PATCH_NAME 应用失败，可能已应用或上下文不匹配"
             fi
