@@ -68,7 +68,7 @@ on:
         required: true
         default: false
         type: boolean
-      
+
       enable_serialid_check:
         description: "添加SerialID校验"
         required: true
@@ -616,7 +616,22 @@ jobs:
             exit 1
           fi
           echo "==> Droidspaces patch 添加完成"
-          
+
+      - name: 🔧 Apply ntsync Patch (应用 ntsync 补丁)
+        if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
+        working-directory: kernel_workspace/common
+        run: |
+          echo "==> 开始应用 ntsync 补丁..."
+          NTSYNC_PATCH="${GITHUB_WORKSPACE}/patch/ntsync_compat_6.6.patch"
+          if [ ! -f "$NTSYNC_PATCH" ]; then
+            echo "::error::未找到 ntsync 补丁: $NTSYNC_PATCH"
+            exit 1
+          fi
+          if ! patch -p1 --forward < "$NTSYNC_PATCH"; then
+            echo "::warning::ntsync 补丁应用失败，可能已应用或上下文不匹配"
+          fi
+          echo "==> ntsync 补丁应用完成"
+
       - name: 🔧 Set gki_defconfig (设置编译配置) 
         run: |
           cd kernel_workspace
@@ -658,6 +673,7 @@ jobs:
             echo "CONFIG_IP_SET_HASH_IP=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_IP_SET_HASH_NET=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_NETFILTER_XT_SET=y" >> ./common/arch/arm64/configs/gki_defconfig
+            # ntsync 驱动 (Droidspaces 配套组件)
             echo "CONFIG_NTSYNC=y" >> ./common/arch/arm64/configs/gki_defconfig
           fi
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
