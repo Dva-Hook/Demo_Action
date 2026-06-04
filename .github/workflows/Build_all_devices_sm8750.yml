@@ -622,14 +622,17 @@ jobs:
         working-directory: kernel_workspace/common
         run: |
           echo "==> 开始应用 ntsync 补丁..."
-          NTSYNC_PATCH="${GITHUB_WORKSPACE}/patch/ntsync_compat_6.6.patch"
-          if [ ! -f "$NTSYNC_PATCH" ]; then
-            echo "::error::未找到 ntsync 补丁: $NTSYNC_PATCH"
-            exit 1
-          fi
-          if ! patch -p1 --forward < "$NTSYNC_PATCH"; then
-            echo "::warning::ntsync 补丁应用失败，可能已应用或上下文不匹配"
-          fi
+          for PATCH_NAME in "ntsync_base.patch" "ntsync_compat_6.6.patch"; do
+            PATCH_PATH="${GITHUB_WORKSPACE}/patch/${PATCH_NAME}"
+            if [ ! -f "$PATCH_PATH" ]; then
+              echo "::error::未找到 ntsync 补丁: $PATCH_PATH"
+              exit 1
+            fi
+            echo "  应用: $PATCH_NAME"
+            if ! patch -p1 --forward < "$PATCH_PATH"; then
+              echo "::warning::补丁 $PATCH_NAME 应用失败，可能已应用或上下文不匹配"
+            fi
+          done
           echo "==> ntsync 补丁应用完成"
 
       - name: 🔧 Set gki_defconfig (设置编译配置) 
