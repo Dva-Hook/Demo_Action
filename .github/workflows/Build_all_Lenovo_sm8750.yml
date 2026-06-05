@@ -172,7 +172,7 @@ jobs:
               6.6.102)
                 KERNEL_TIME='Tue Dec 9 15:43:22 UTC 2025'
                 ;;
-              6.6.102)
+              6.6.118)
                 KERNEL_TIME='Thu Feb 26 02:40:50 UTC 2026'
                 ;;
             esac
@@ -480,7 +480,7 @@ jobs:
           echo "正在配置ReSukiSU..."
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s dev
           cd ./KernelSU 
-          KSU_VERSION=$(expr $(git rev-list --count dev) + 30700 2>/dev/null || echo 114514)
+          KSU_VERSION=$(expr $(git rev-list --count origin/dev 2>/dev/null) + 30700 2>/dev/null || echo 114514)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
 
