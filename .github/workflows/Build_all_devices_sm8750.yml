@@ -92,7 +92,7 @@ jobs:
         id: set-matrix
         run: |
           if [ "${{ github.event.inputs.build_all_devices }}" = "true" ]; then
-            echo "devices=[\"oneplus_13\",\"oneplus_ace5_pro\",\"oneplus_ace_6\",\"oneplus_13t\",\"oneplus_pad_2_pro\",\"oneplus_ace5_ultra\",\"realme_GT7\",\"realme_GT7pro\",\"realme_GT7pro_Speed\",\"realme_GT8\"]" >> $GITHUB_OUTPUT
+            echo "devices=[\"oneplus_13\",\"oneplus_ace5_pro\",\"oneplus_ace_6\",\"oneplus_13t\",\"oneplus_pad_2\",\"oneplus_pad_2_pro\",\"oneplus_ace5_ultra\",\"realme_GT7\",\"realme_GT7pro\",\"realme_GT7pro_Speed\",\"realme_GT8\"]" >> $GITHUB_OUTPUT
             echo "🚀 将编译所有机型"
           else
             DEVICE="${{ github.event.inputs.device_name }}"
@@ -151,7 +151,7 @@ jobs:
               ;;
             oneplus_pad_2_pro)
               echo "REPO_MANIFEST=sm8750_b_16.0.0_pad_2_pro" >> $GITHUB_ENV
-              echo "IMAGENAME=Image_Op_Pad_2_Pro_New" >> $GITHUB_ENV
+              echo "IMAGENAME=Image_Op_Pad_2_Pro" >> $GITHUB_ENV
               echo "SCHED_FILE=oneplus_pad_2_pro_b" >> $GITHUB_ENV
               ;;
             oneplus_pad_2)
