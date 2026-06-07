@@ -810,7 +810,34 @@ jobs:
         run: |
           echo "正在应用KPM并修补内核..."
           cd kernel_workspace/common/out/arch/arm64/boot
-          curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.12.2/patch_linux
+
+          download_patch_linux() {
+            local max_retries=5
+            local retry_delay=10
+            local attempt=1
+
+            while [ $attempt -le $max_retries ]; do
+              echo "  尝试下载 patch_linux (第 ${attempt}/${max_retries} 次)..."
+              curl -L --connect-timeout 30 --max-time 300 \
+                -o patch_linux \
+                https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.12.2/patch_linux
+
+              if [ -s patch_linux ] && ! head -c 100 patch_linux | grep -qi '<html'; then
+                local fsize=$(stat -c%s patch_linux 2>/dev/null || stat -f%z patch_linux 2>/dev/null || echo 0)
+                echo "  ✅ patch_linux 下载成功 (大小: ${fsize} bytes)"
+                return 0
+              fi
+
+              rm -f patch_linux
+              sleep $retry_delay
+              attempt=$((attempt + 1))
+            done
+
+            echo "::error::patch_linux 下载失败，已重试 ${max_retries} 次"
+            return 1
+          }
+
+          download_patch_linux || exit 1
           chmod +x patch_linux
           ./patch_linux
           rm -f Image
