@@ -38,6 +38,12 @@ on:
         default: false
         type: boolean
 
+      enable_ksu:
+        description: "集成Root(取消勾选则不内嵌root)"
+        required: true
+        default: true
+        type: boolean
+
       enable_ReKernel:
         description: "启用Re-Kernel支持"
         required: false
@@ -112,6 +118,7 @@ jobs:
       ENABLE_ADIOS: ${{ github.event.inputs.enable_Adios }}
       ENABLE_DROIDSPACES: ${{ github.event.inputs.enable_droidspaces }}
       ENABLE_BBG: ${{ github.event.inputs.enable_bbg }}
+      ENABLE_KSU: ${{ github.event.inputs.enable_ksu }}
       ENABLE_KPM: ${{ github.event.inputs.enable_kpm }}
       ENABLE_SUSFS: ${{ github.event.inputs.enable_susfs }}
       ENABLE_SIGNED: ${{ github.event.inputs.enable_signed }}
@@ -475,17 +482,18 @@ jobs:
 
       
       - name: ⚙️ Set ReSukiSU (设置ReSukiSU)
+        if: ${{ env.ENABLE_KSU == 'true' }}
         run: |
           cd kernel_workspace
           echo "正在配置ReSukiSU..."
-          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s dev
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s main
           cd ./KernelSU 
-          KSU_VERSION=$(expr $(git rev-list --count origin/dev 2>/dev/null) + 30700 2>/dev/null || echo 114514)
+          KSU_VERSION=$(expr $(git rev-list --count origin/main 2>/dev/null) + 30700 2>/dev/null || echo 114514)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
 
       - name: 🔧 Set up SUSFS (配置 SUSFS)
-        if: ${{ env.ENABLE_SUSFS == 'true' }}
+        if: ${{ env.ENABLE_SUSFS == 'true' && env.ENABLE_KSU == 'true' }}
         run: |
           cd kernel_workspace
           git clone --depth=1 https://github.com/cctv18/susfs4oki.git susfs4ksu -b oki-android15-6.6
@@ -609,32 +617,35 @@ jobs:
           fi
 
           # ==================== KSU 配置 ====================
-          echo "CONFIG_KSU=y" >> "$DEFCONFIG"
-          echo "CONFIG_KPM=y" >> "$DEFCONFIG"
+          if [ "${{ env.ENABLE_DROIDSPACES }}" = "true" ]; then
+            echo "CONFIG_KSU=y" >> "$DEFCONFIG"
+            echo "CONFIG_KPM=y" >> "$DEFCONFIG"
 
-          echo 'CONFIG_KSU_FULL_NAME_FORMAT="%TAG_NAME%-%COMMIT_SHA%-Re-TG@qdykernel"' >> "$DEFCONFIG"
+            echo 'CONFIG_KSU_FULL_NAME_FORMAT="%TAG_NAME%-%COMMIT_SHA%-Re-TG@qdykernel"' >> "$DEFCONFIG"
 
-          # ==================== SUSFS 配置 ====================
-          if [ "${{ env.ENABLE_SUSFS }}" == 'true' ];then
-            echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$DEFCONFIG"
+            # ==================== SUSFS 配置 ====================
+            if [ "${{ env.ENABLE_SUSFS }}" == 'true' ];then
+              echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$DEFCONFIG"
+              echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> "$DEFCONFIG"
+            else
+              echo "未启用SUSFS 跳过SUSFS配置"
+            fi
           else
-            echo "未启用SUSFS 跳过SUSFS配置"
+            echo "未启用KSU，将不会内嵌Root及SUSFS"
           fi
-          
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
 
