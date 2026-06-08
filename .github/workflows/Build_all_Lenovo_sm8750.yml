@@ -617,7 +617,7 @@ jobs:
           fi
 
           # ==================== KSU 配置 ====================
-          if [ "${{ env.ENABLE_DROIDSPACES }}" = "true" ]; then
+          if [ "${{ env.ENABLE_KSU }}" = "true" ]; then
             echo "CONFIG_KSU=y" >> "$DEFCONFIG"
             echo "CONFIG_KPM=y" >> "$DEFCONFIG"
 
