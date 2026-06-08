@@ -39,7 +39,7 @@ on:
         type: boolean
 
       enable_ksu:
-        description: "集成Root(取消勾选则不内嵌root)"
+        description: "集成 KernelSU（基于内核的 Root 方案）"
         required: true
         default: true
         type: boolean
