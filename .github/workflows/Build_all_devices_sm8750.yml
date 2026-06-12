@@ -984,7 +984,7 @@ jobs:
             if [ -d "$ak3_dir" ]; then
               name=$(basename "$ak3_dir")
               echo "打包 AK3: $name"
-              (cd "$ak3_dir" && zip -qr "../../${name}.zip" .)
+              (cd "$ak3_dir" && zip -qr "../${name}.zip" .)
             fi
           done
 
@@ -993,7 +993,7 @@ jobs:
             if [ -d "$rk_dir" ]; then
               name=$(basename "$rk_dir")
               echo "打包 Re-Kernel: $name"
-              (cd "$rk_dir" && zip -qr "../../${name}.zip" .)
+              (cd "$rk_dir" && zip -qr "../${name}.zip" .)
             fi
           done
 
