@@ -988,10 +988,19 @@ jobs:
             fi
           done
 
+          # 如果 Re-Kernel 模块存在，打包为 zip
+          for rk_dir in ./release_assets/Re-Kernel-v*/; do
+            if [ -d "$rk_dir" ]; then
+              name=$(basename "$rk_dir")
+              echo "打包 Re-Kernel: $name"
+              (cd "$rk_dir" && zip -qr "../../${name}.zip" .)
+            fi
+          done
+
           # 列出所有待上传的文件
           echo ""
           echo "=== 待上传到 Release 的文件 ==="
-          find ./release_assets -type f | sort
+          find ./release_assets -maxdepth 1 -type f | sort
 
       - name: 🏷️ Create Release and Upload Assets (创建发布并上传)
         env:
@@ -1099,8 +1108,8 @@ jobs:
           cat release_notes.md
           echo ""
 
-          # 收集所有待上传的文件
-          RELEASE_FILES=$(find ./release_assets -type f \( -name 'Image_*' -o -name '*.zip' -o -name '*.7z' \) 2>/dev/null || true)
+          # 收集所有待上传的文件（仅 AK3 zip 和 Re-Kernel zip）
+          RELEASE_FILES=$(find ./release_assets -maxdepth 1 -type f \( -name 'AK3_*.zip' -o -name 'Re-Kernel-v*.zip' \) 2>/dev/null || true)
 
           if [ -z "$RELEASE_FILES" ]; then
             echo "::warning::没有找到待上传的发布文件"
