@@ -450,9 +450,15 @@ jobs:
 
       - name: 🔧 Apply Sched Patch (应用完美风驰补丁)
         run: |
+          # Droidspaces 依赖 SCX，启用 Droidspaces 时强制走 SCX 路径
+          FORCE_SCX=false
+          if [ "${{ env.ENABLE_DROIDSPACES }}" = "true" ] && [ "${{ env.ENABLE_SCX }}" != "true" ]; then
+            echo "::notice::Droidspaces 依赖完美风驰 (SCX)，已自动启用 SCX 补丁"
+            FORCE_SCX=true
+          fi
           if [ "$SCHED_FILE" = "none" ]; then
             echo "该机型自带风驰，跳过所有补丁应用"
-          elif [ "${{ env.ENABLE_SCX }}" = "true" ]; then
+          elif [ "${{ env.ENABLE_SCX }}" = "true" ] || [ "$FORCE_SCX" = "true" ]; then
             cd kernel_workspace/common
             if [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICES_NAME}" = "realme_GT7" ] || [ "${DEVICES_NAME}" = "oneplus_pad_2" ]; then
               git clone https://github.com/Numbersf/SCHED_PATCH.git -b "mt6991"
@@ -1017,39 +1023,31 @@ jobs:
           DEVICE_COUNT=$(echo "$DEVICES_JSON" | jq -r '.[]' | wc -l)
           DEVICE_LIST=$(echo "$DEVICES_JSON" | jq -r '.[]' | tr '\n' ' ')
 
-          # 提取 KSU 版本号（从 AK3 产物名中获取）
-          AK3_DIR=$(ls -d ./release_assets/AK3_*/ 2>/dev/null | head -1 || echo "")
-          if [ -n "$AK3_DIR" ]; then
-            KSU_VER=$(basename "$AK3_DIR" | sed 's/AK3_\([0-9]*\)_.*/\1/')
-          else
-            KSU_VER="unknown"
-          fi
+          # KSU 版本号（来自 build_matrix 输出的 ksuver）
+          KSU_VER="${{ needs.build_matrix.outputs.ksuver }}"
 
           # 功能配置描述
           FEATURES=""
           if [ "${{ github.event.inputs.enable_ReKernel }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ Re-Kernel 支持\n"
+            FEATURES="${FEATURES}- ✅ Re-Kernel 支持"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_Adios }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ ADIOS IO调度器\n"
+            FEATURES="${FEATURES}- ✅ ADIOS IO调度器"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_scx }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ 完美风驰 (SCX)\n"
+            FEATURES="${FEATURES}- ✅ 完美风驰 (SCX)"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_bbg }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ BBG 基带守护\n"
+            FEATURES="${FEATURES}- ✅ BBG 基带守护"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_droidspaces }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ Droidspaces 容器支持\n"
-          fi
-          if [ "${{ github.event.inputs.enable_serialid_check }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ SerialID 校验\n"
+            FEATURES="${FEATURES}- ✅ Droidspaces 容器支持"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_ksu }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ ReSukiSU (KernelSU)\n"
+            FEATURES="${FEATURES}- ✅ 集成ReSukiSU"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_susfs }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ SUSFS 挂载支持\n"
+            FEATURES="${FEATURES}- ✅ SUSFS 挂载支持"$'\n'
           fi
 
           # 自定义内核后缀
@@ -1088,10 +1086,9 @@ jobs:
 
           ### 📋 安装方法 | Installation Guide
 
-          1.若你的手机之前已有 root 权限，可在手机上安装 [HorizonKernelFlasher](https://github.com/libxzr/HorizonKernelFlasher/releases)，在 HorizonKernelFlasher 中刷入 AnyKernel 刷机包并重启；
-          2. 若你已刷入 ReSukiSU 内核，且 SukiSU Ultra 管理器已更新至最新版本，可在管理器中直接刷入 AnyKernel 刷机包并重启；
-          3. 由于 KernelSU 上游更新了元模块功能，最新版 KSU 管理器需要配合元模块 (metamodule) 才能正常挂载模块。目前的元模块包括 [meta overlayfs](https://github.com/KernelSU-Modules-Repo/meta-overlayfs), [mountify](https://github.com/backslashxx/mountify), [meta magicmount](https://github.com/7a72/meta-magic_mount/) 等。若你是第一次使用 KSU 或刚从旧版 KSU 管理器升级至新版，请先安装一个元模块；
-          4. 若启用 Re-Kernel，需配合 NoActive 软件使用，以提升后台冻结能力。
+          1. 若你已刷入 ReSukiSU 内核，且 ReSukiSU 管理器已更新至最新版本，可在管理器中直接刷入 AnyKernel 刷机包并重启；
+          2. 由于 KernelSU 上游更新了元模块功能，最新版 KSU 管理器需要配合元模块 (metamodule) 才能正常挂载模块。目前的元模块包括 [meta overlayfs](https://github.com/KernelSU-Modules-Repo/meta-overlayfs), [mountify](https://github.com/backslashxx/mountify), [meta magicmount](https://github.com/7a72/meta-magic_mount/) 等。若你是第一次使用 KSU 或刚从旧版 KSU 管理器升级至新版，请先安装一个元模块；
+          3. 若启用 Re-Kernel，需刷入配套Re-Kernel模块并配合 NoActive 软件使用，以提升后台冻结能力。
 
           #### 🔗 相关链接
 
