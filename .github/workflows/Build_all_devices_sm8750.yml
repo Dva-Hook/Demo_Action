@@ -1034,7 +1034,7 @@ jobs:
           if [ "${{ github.event.inputs.enable_Adios }}" = "true" ]; then
             FEATURES="${FEATURES}- ✅ ADIOS IO调度器"$'\n'
           fi
-          if [ "${{ github.event.inputs.enable_scx }}" = "true" ]; then
+          if [ "${{ github.event.inputs.enable_scx }}" = "true" ] || [ "${{ github.event.inputs.enable_droidspaces }}" = "true" ]; then
             FEATURES="${FEATURES}- ✅ 完美风驰 (SCX)"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_bbg }}" = "true" ]; then
