@@ -402,16 +402,6 @@ jobs:
             echo "未命中仓库缓存，也未找到公共缓存，将从空缓存开始构建"
           fi
 
-      - name: 🔧 Apply Sched Patch (应用完美风驰补丁)
-        run: |
-            cd kernel_workspace/common
-            echo "开始应用风驰补丁"
-            PATCH_FILE="${GITHUB_WORKSPACE}/patch/aosp_6.6_scx.patch"
-            cp $PATCH_FILE ./
-            dos2unix aosp_6.6_scx.patch
-            patch -p1 -F 3 < aosp_6.6_scx.patch
-            echo "完美风驰补丁应用完成"
-
       - name: 🔧 Add Re-Kernel Support (添加 Re-Kernel 支持)
         if: ${{ env.ENABLE_REKERNEL == 'true' }}
         run: |
