@@ -192,48 +192,113 @@ jobs:
 
       - name: 🛠 Install dependencies and Initialize repo and sync （安装环境依赖+初始化源码仓库及工具链）
         run: |
-          rm -rf kernel_workspace
-          mkdir kernel_workspace
-          cd kernel_workspace
-          
-          sudo apt-mark hold firefox &&
-          sudo apt-mark hold libc-bin &&
-          sudo apt purge man-db &&
-          sudo rm -rf /var/lib/man-db/auto-update &&
-          sudo apt update &&
-          sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix p7zip-full zstd &
-          wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/ccache-x86-64 -O ccache &&
-          sudo cp -f ./ccache /usr/bin/ccache &&
-          sudo chmod +x /usr/bin/ccache &&
-          rm -f ./ccache &
-          echo "正在克隆源码仓库..."
-          aria2c -s16 -x16 -k1M "https://github.com/showdo/Build_Lenovo_sm8750/releases/download/common/${{ env.os_patch_level }}.tar.gz" -o common.tar.gz && \
-          mkdir -p common && \
-          tar -xzf common.tar.gz -C common && \
-          rm -f common.tar.gz &
+          set -euo pipefail
 
-          
-          echo "正在克隆llvm-clang18工具链..." &&
-          mkdir -p clang18 &&
-          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip -o clang.zip &&
-          unzip -q clang.zip -d clang18 &&
-          rm -rf clang.zip &
-          
-          echo "正在克隆构建工具..." &&
-          aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip -o build-tools.zip &&
-          unzip -q build-tools.zip &&
-          rm -rf build-tools.zip &
-          
-          wait
-          echo "所有源码及llvm-Clang18工具链初始化完成！"
-          echo "正在去除 ABI 保护 & 去除 dirty 后缀..."
-          rm common/android/abi_gki_protected_exports_* || true
-          # if [[ "${{ env.KERNEL_VERSION }}" != "6.6.102" ]]; then
-            for f in common/scripts/setlocalversion; do
-              sed -i 's/ -dirty//g' "$f"
-              sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' "$f"
-            done
-          # fi
+          # 初始化工作目录
+          rm -rf kernel_workspace
+          mkdir -p kernel_workspace
+          cd kernel_workspace
+          WORKDIR="$(pwd)"
+
+          # ─── 阶段 1: 系统包清理（必须串行，避免锁冲突） ───
+          echo "==> 清理系统包..."
+          sudo apt-mark hold firefox
+          sudo apt-mark hold libc-bin
+          sudo apt purge -y man-db
+          sudo rm -rf /var/lib/man-db/auto-update
+          sudo apt update
+          echo "✅ 系统包清理完成"
+
+          # ─── 阶段 2: 并行下载 & 安装 ───
+          FAILED_TASKS=()
+
+          # 任务 A: 安装编译依赖
+          {
+            echo "[任务A] 安装编译依赖..."
+            sudo apt-get install -y --no-install-recommends \
+              binutils python-is-python3 libssl-dev libelf-dev \
+              dos2unix p7zip-full zstd \
+            && echo "✅ [任务A] 编译依赖安装完成" \
+            || { echo "❌ [任务A] 编译依赖安装失败"; exit 1; }
+          } &
+          PID_A=$!
+
+          # 任务 B: 安装 ccache
+          {
+            echo "[任务B] 安装 ccache..."
+            wget -q "https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/lib/ccache-x86-64" -O ccache \
+              && sudo cp -f ./ccache /usr/bin/ccache \
+              && sudo chmod +x /usr/bin/ccache \
+              && rm -f ./ccache \
+              && echo "✅ [任务B] ccache 安装完成" \
+              || { echo "❌ [任务B] ccache 安装失败"; exit 1; }
+          } &
+          PID_B=$!
+
+          # 任务 C: 下载源码仓库
+          {
+            echo "[任务C] 下载源码仓库..."
+            aria2c -s16 -x16 -k1M \
+              "https://github.com/showdo/Build_Lenovo_sm8750/releases/download/common/${{ env.os_patch_level }}.tar.gz" \
+              -o common.tar.gz \
+              && mkdir -p common \
+              && tar -xzf common.tar.gz -C common \
+              && rm -f common.tar.gz \
+              && echo "✅ [任务C] 源码仓库下载完成" \
+              || { echo "❌ [任务C] 源码仓库下载失败"; exit 1; }
+          } &
+          PID_C=$!
+
+          # 任务 D: 下载 LLVM Clang 18 工具链
+          {
+            echo "[任务D] 下载 LLVM Clang 18 工具链..."
+            mkdir -p clang18 \
+              && aria2c -s16 -x16 -k1M \
+                "https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip" \
+                -o clang.zip \
+              && unzip -q clang.zip -d clang18 \
+              && rm -f clang.zip \
+              && echo "✅ [任务D] Clang 工具链下载完成" \
+              || { echo "❌ [任务D] Clang 工具链下载失败"; exit 1; }
+          } &
+          PID_D=$!
+
+          # 任务 E: 下载构建工具
+          {
+            echo "[任务E] 下载构建工具..."
+            aria2c -s16 -x16 -k1M \
+              "https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip" \
+              -o build-tools.zip \
+              && unzip -q build-tools.zip \
+              && rm -f build-tools.zip \
+              && echo "✅ [任务E] 构建工具下载完成" \
+              || { echo "❌ [任务E] 构建工具下载失败"; exit 1; }
+          } &
+          PID_E=$!
+
+          # ─── 等待所有任务完成并收集结果 ───
+          for pid in $PID_A $PID_B $PID_C $PID_D $PID_E; do
+            if ! wait $pid; then
+              FAILED_TASKS+=($pid)
+            fi
+          done
+
+          # 检查是否有失败任务
+          if [ ${#FAILED_TASKS[@]} -gt 0 ]; then
+            echo "::error::以下后台任务失败: ${FAILED_TASKS[*]}"
+            exit 1
+          fi
+
+          echo "============================================"
+          echo "✅ 所有源码及 LLVM Clang 18 工具链初始化完成！"
+          echo "============================================"
+
+          # ─── 去除 ABI 保护 & dirty 后缀 ───
+          echo "==> 去除 ABI 保护 & 去除 dirty 后缀..."
+          if [ -f common/scripts/setlocalversion ]; then
+            sed -i 's/ -dirty//g' common/scripts/setlocalversion
+          fi
+          rm -f common/android/abi_gki_protected_exports_* || true
 
       - name: 🛠 Set ccache DIR(配置ccache目录)
         run: |
