@@ -262,6 +262,48 @@ def _start_local_proxy(proxy_tuple, timeout=8):
             try: client_sock.close()
             except: pass
 
+    logger.info(f'Starting local proxy localhost:{local_port} -> {protocol}://{host}:{port}')
+    try:
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", local_port))
+        server.listen(32)
+        server.settimeout(2.0)
+    except Exception as e:
+        logger.warning(f"Local proxy bind failed: {e}")
+        return None, None
+
+    def _accept_loop():
+        while getattr(_accept_loop, "_running", True):
+            try:
+                client, addr = server.accept()
+                t = threading.Thread(target=_handle_client, args=(client,), daemon=True)
+                t.start()
+            except socket.timeout:
+                continue
+            except Exception:
+                break
+        try: server.close()
+        except: pass
+    _accept_loop._running = True
+    t = threading.Thread(target=_accept_loop, daemon=True)
+    t.start()
+
+    # Validate local forward chain
+    try:
+        r = _req.get("http://httpbin.org/ip",
+                     proxies={"http": f"http://127.0.0.1:{local_port}"},
+                     timeout=timeout)
+        ip = r.json().get("origin", "unknown")
+        logger.info(f"Proxy chain OK, exit IP: {ip}")
+        return local_port, t
+    except Exception as e:
+        logger.warning(f"Upstream proxy unreachable ({protocol}://{host}:{port}): {e}")
+        _accept_loop._running = False
+        try: server.close()
+        except: pass
+        return None, None
+
 
 def _pick_proxy(strategy, job_index, proxies):
     """从代理列表中按策略选取一个代理. 返回原始字符串或 None."""
