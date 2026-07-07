@@ -91,7 +91,7 @@ def _start_local_proxy(proxy_tuple, timeout=8):
     logger.info(f'Starting local proxy localhost:{local_port} -> {protocol}://{host}:{port}')
     try:
         proc = subprocess.Popen(
-            ['python3', '-m', 'pproxy', '-l', f'http://:{local_port}', '-r', upstream],
+            ['python3', '-m', 'pproxy', '-l', f'http://127.0.0.1:{local_port}', '-r', upstream],
             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )
         _proxy_processes.append(proc)
