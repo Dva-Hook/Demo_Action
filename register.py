@@ -75,6 +75,10 @@ def _parse_proxy_line(line):
     else:
         logger.warning(f'Invalid proxy format (expected [protocol://]host:port[:user:pass]): {line}')
         return None
+
+_proxy_processes = []
+atexit.register(lambda: [p.kill() for p in _proxy_processes if p.poll() is None])
+
 def _start_local_proxy(proxy_tuple, timeout=8):
     """Start local pproxy forward: Chrome -> localhost:PORT -> upstream. Returns (local_port, proc) or (None, None)"""
     protocol, host, port, user, pwd = proxy_tuple
