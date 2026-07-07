@@ -77,51 +77,171 @@ def _parse_proxy_line(line):
         return None
 
 _proxy_processes = []
-atexit.register(lambda: [p.kill() for p in _proxy_processes if p.poll() is None])
+atexit.register(lambda: [p.kill() if hasattr(p, 'poll') else setattr(p, '_running', False) for p in _proxy_processes])
 
 def _start_local_proxy(proxy_tuple, timeout=8):
-    """Start local pproxy forward: Chrome -> localhost:PORT -> upstream. Returns (local_port, proc) or (None, None)"""
+    """Start local TCP forwarder: Chrome -> localhost:PORT -> upstream proxy (HTTP or SOCKS5).
+    Returns (local_port, thread) or (None, None)."""
     protocol, host, port, user, pwd = proxy_tuple
     local_port = _find_free_port()
-    if user and pwd:
-        upstream = f'{protocol}://{user}:{pwd}@{host}:{port}'
-    else:
-        upstream = f'{protocol}://{host}:{port}'
+
+    import select as _sel
+
+    def _socks5_connect(target_host, target_port):
+        """Raw SOCKS5 handshake with username/password auth. Returns connected socket or raises."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
+        s.connect((host, int(port)))
+        # Greeting
+        s.sendall(b"\x05\x01\x02")
+        resp = s.recv(2)
+        if resp != b"\x05\x02":
+            raise Exception(f"SOCKS5 auth method rejected: {resp.hex()}")
+        # Auth
+        u, p = user.encode(), pwd.encode()
+        s.sendall(b"\x01" + bytes([len(u)]) + u + bytes([len(p)]) + p)
+        resp = s.recv(2)
+        if resp != b"\x01\x00":
+            raise Exception(f"SOCKS5 auth failed: {resp.hex()}")
+        # Connect request
+        import struct as _struct
+        ip_bytes = socket.inet_aton(socket.gethostbyname(target_host))
+        req = b"\x05\x01\x00\x01" + ip_bytes + _struct.pack(">H", target_port)
+        s.sendall(req)
+        resp = s.recv(10)
+        if len(resp) < 10 or resp[1] != 0x00:
+            raise Exception(f"SOCKS5 connect failed: {resp.hex() if len(resp) >= 2 else 'short'}")
+        s.settimeout(None)
+        return s
+
+    def _http_connect(target_host, target_port):
+        """HTTP CONNECT through upstream HTTP proxy with Basic auth. Returns connected socket."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
+        s.connect((host, int(port)))
+        import base64 as _b64
+        cred = _b64.b64encode(f"{user}:{pwd}".encode()).decode()
+        connect_req = (
+            f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
+            f"Host: {target_host}:{target_port}\r\n"
+            f"Proxy-Authorization: Basic {cred}\r\n"
+            f"\r\n"
+        ).encode()
+        s.sendall(connect_req)
+        resp = s.recv(4096)
+        if not resp.startswith(b"HTTP/1.") or b"200" not in resp.split(b"\r\n")[0]:
+            raise Exception(f"HTTP CONNECT failed: {resp.split(b'\r\n')[0].decode()}")
+        s.settimeout(None)
+        return s
+
+    def _forward_pair(a, b):
+        """Bidirectional byte forwarding between two sockets."""
+        sockets = [a, b]
+        while True:
+            try:
+                r, _, _ = _sel.select(sockets, [], [], 30)
+            except Exception:
+                break
+            if not r:
+                break
+            for sock in r:
+                try:
+                    data = sock.recv(32768)
+                except Exception:
+                    data = None
+                if not data:
+                    try: a.close()
+                    except: pass
+                    try: b.close()
+                    except: pass
+                    return
+                peer = b if sock is a else a
+                try:
+                    peer.sendall(data)
+                except Exception:
+                    try: a.close()
+                    except: pass
+                    try: b.close()
+                    except: pass
+                    return
+
+    def _handle_client(client_sock):
+        """Handle one client connection: parse CONNECT, connect upstream, forward."""
+        try:
+            client_sock.settimeout(10)
+            data = b""
+            while b"\r\n\r\n" not in data:
+                chunk = client_sock.recv(4096)
+                if not chunk:
+                    client_sock.close()
+                    return
+                data += chunk
+                if len(data) > 16384:
+                    client_sock.close()
+                    return
+            first_line = data.split(b"\r\n")[0].decode()
+            parts = first_line.split()
+            if len(parts) < 2 or parts[0] != "CONNECT":
+                client_sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+                client_sock.close()
+                return
+            target = parts[1].split(":")
+            target_host = target[0]
+            target_port = int(target[1]) if len(target) > 1 else 443
+
+            if protocol == "socks5":
+                upstream_sock = _socks5_connect(target_host, target_port)
+            else:
+                upstream_sock = _http_connect(target_host, target_port)
+
+            client_sock.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            client_sock.settimeout(None)
+            _forward_pair(client_sock, upstream_sock)
+        except Exception as e:
+            logger.debug(f"Forward handler error: {e}")
+            try: client_sock.close()
+            except: pass
 
     logger.info(f'Starting local proxy localhost:{local_port} -> {protocol}://{host}:{port}')
     try:
-        proc = subprocess.Popen(
-            ['python3', '-m', 'pproxy', '-l', f'http://127.0.0.1:{local_port}', '-r', upstream],
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
-        )
-        _proxy_processes.append(proc)
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", local_port))
+        server.listen(32)
+        server.settimeout(2.0)
     except Exception as e:
-        logger.warning(f'pproxy start failed: {e}')
+        logger.warning(f"Local proxy bind failed: {e}")
         return None, None
 
-    time.sleep(1.5)
-
-    # Check if pproxy exited (startup failure)
-    if proc.poll() is not None:
-        stderr_out = proc.stderr.read().decode('utf-8', errors='replace').strip() if proc.stderr else ''
-        logger.warning(f'pproxy exited early (rc={proc.returncode}), stderr: {stderr_out[:300]}')
-        return None, None
+    def _accept_loop():
+        while getattr(_accept_loop, "_running", True):
+            try:
+                client, addr = server.accept()
+                t = threading.Thread(target=_handle_client, args=(client,), daemon=True)
+                t.start()
+            except socket.timeout:
+                continue
+            except Exception:
+                break
+        try: server.close()
+        except: pass
+    _accept_loop._running = True
+    t = threading.Thread(target=_accept_loop, daemon=True)
+    t.start()
 
     # Validate local forward chain
     try:
-        r = _req.get('http://httpbin.org/ip',
-                     proxies={'http': f'http://127.0.0.1:{local_port}'},
+        r = _req.get("http://httpbin.org/ip",
+                     proxies={"http": f"http://127.0.0.1:{local_port}"},
                      timeout=timeout)
-        ip = r.json().get('origin', 'unknown')
-        logger.info(f'Proxy chain OK, exit IP: {ip}')
-        return local_port, proc
+        ip = r.json().get("origin", "unknown")
+        logger.info(f"Proxy chain OK, exit IP: {ip}")
+        return local_port, t
     except Exception as e:
-        stderr_out = proc.stderr.read().decode('utf-8', errors='replace').strip() if proc.stderr else ''
-        logger.warning(f'Upstream proxy unreachable ({protocol}://{host}:{port}): {e}')
-        if stderr_out:
-            logger.warning(f'   pproxy stderr: {stderr_out[:300]}')
-        try: proc.kill()
-        except Exception: pass
+        logger.warning(f"Upstream proxy unreachable ({protocol}://{host}:{port}): {e}")
+        _accept_loop._running = False
+        try: server.close()
+        except: pass
         return None, None
 def _pick_proxy(strategy, job_index, proxies):
     """从代理列表中按策略选取一个代理. 返回原始字符串或 None."""
@@ -720,8 +840,11 @@ def main():
     try:
         ok = register_one(acc, proxy_local_port)
     finally:
-        if proxy_proc and proxy_proc.poll() is None:
-            proxy_proc.kill()
+        if proxy_proc:
+            if hasattr(proxy_proc, 'poll'):
+                if proxy_proc.poll() is None:
+                    proxy_proc.kill()
+            # else: daemon thread, dies with process
             logger.info('🛑 代理进程已清理')
     logger.info(f'\n🏁 注册结束: {"✅ 成功" if ok else "❌ 失败"}')
 
