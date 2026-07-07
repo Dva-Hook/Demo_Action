@@ -479,30 +479,8 @@ jobs:
                   return None
               host, port, user, pwd = parts
               ext_dir = tempfile.mkdtemp(prefix='chrome_proxy_ext_')
-              manifest = '''{
-                  "version": "1.0.0",
-                  "manifest_version": 2,
-                  "name": "ProxyAuthExt",
-                  "permissions": ["proxy", "webRequest", "webRequestBlocking", "<all_urls>"],
-                  "background": {"scripts": ["bg.js"]}
-              }'''
-              bg_js = f'''
-          var cfg = {{
-              mode: "fixed_servers",
-              rules: {{
-                  singleProxy: {{scheme: "http", host: "{host}", port: {port}}},
-                  bypassList: ["localhost", "127.0.0.1"]
-              }}
-          }};
-          chrome.proxy.settings.set({{value: cfg, scope: "regular"}}, function(){{}});
-          chrome.webRequest.onAuthRequired.addListener(
-              function(details) {{
-                  return {{authCredentials: {{username: "{user}", password: "{pwd}"}}}};
-              }},
-              {{urls: ["<all_urls>"]}},
-              ["blocking"]
-          );
-          '''
+              manifest = '{\"version\": \"1.0.0\", \"manifest_version\": 2, \"name\": \"ProxyAuthExt\", \"permissions\": [\"proxy\", \"webRequest\", \"webRequestBlocking\", \"<all_urls>\"], \"background\": {\"scripts\": [\"bg.js\"]}}'
+              bg_js = f'var cfg={{\"mode\":\"fixed_servers\",\"rules\":{{\"singleProxy\":{{\"scheme\":\"http\",\"host\":\"{host}\",\"port\":{port}}},\"bypassList\":[\"localhost\",\"127.0.0.1\"]}}}};chrome.proxy.settings.set({{\"value\":cfg,\"scope\":\"regular\"}},function(){{}});chrome.webRequest.onAuthRequired.addListener(function(d){{return {{\"authCredentials\":{{\"username\":\"{user}\",\"password\":\"{pwd}\"}}}};}},{{\"urls\":[\"<all_urls>\"]}},[\"blocking\"]);'
               with open(os.path.join(ext_dir, 'manifest.json'), 'w') as f:
                   f.write(manifest)
               with open(os.path.join(ext_dir, 'bg.js'), 'w') as f:
