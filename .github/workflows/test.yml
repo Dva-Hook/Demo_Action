@@ -11,10 +11,6 @@ on:
         description: "并行注册数量 (1-256)"
         required: false
         default: "1"
-      proxy:
-        description: "HTTP代理 (格式 hostname:port:username:password)"
-        required: false
-        default: ""
 
 permissions:
   actions: write
@@ -64,12 +60,11 @@ jobs:
       - name: 执行注册
         env:
           CAPMONSTER_API_KEY: ${{ github.event.inputs.capmonster_key }}
-          PROXY: ${{ github.event.inputs.proxy }}
           PYTHONUNBUFFERED: "1"
           MATRIX_INDEX: "${{ matrix.index }}"
         run: |
           python -c "
-          import string, time, random, logging, os, re, json, threading, tempfile
+          import string, time, random, logging, os, re, json, threading
           from urllib.parse import unquote
           from typing import Optional
           from dataclasses import dataclass
@@ -470,24 +465,6 @@ jobs:
                   logger.info('ℹ️ 15s 未见结果页, 交由后续判定')
                   return ok
 
-          # ═══════════════════════════════ 代理扩展 ═══════════════════════════════
-          def _build_proxy_extension(proxy_str):
-              """解析 hostname:port:username:password 并创建 Chrome 代理认证扩展目录, 返回目录路径"""
-              parts = proxy_str.split(':')
-              if len(parts) != 4:
-                  logger.warning(f'代理格式错误, 应为 hostname:port:username:password, 实际: {proxy_str}')
-                  return None
-              host, port, user, pwd = parts
-              ext_dir = tempfile.mkdtemp(prefix='chrome_proxy_ext_')
-              manifest = '{\"version\": \"1.0.0\", \"manifest_version\": 2, \"name\": \"ProxyAuthExt\", \"permissions\": [\"proxy\", \"webRequest\", \"webRequestBlocking\", \"<all_urls>\"], \"background\": {\"scripts\": [\"bg.js\"]}}'
-              bg_js = f'var cfg={{\"mode\":\"fixed_servers\",\"rules\":{{\"singleProxy\":{{\"scheme\":\"http\",\"host\":\"{host}\",\"port\":{port}}},\"bypassList\":[\"localhost\",\"127.0.0.1\"]}}}};chrome.proxy.settings.set({{\"value\":cfg,\"scope\":\"regular\"}},function(){{}});chrome.webRequest.onAuthRequired.addListener(function(d){{return {{\"authCredentials\":{{\"username\":\"{user}\",\"password\":\"{pwd}\"}}}};}},{{\"urls\":[\"<all_urls>\"]}},[\"blocking\"]);'
-              with open(os.path.join(ext_dir, 'manifest.json'), 'w') as f:
-                  f.write(manifest)
-              with open(os.path.join(ext_dir, 'bg.js'), 'w') as f:
-                  f.write(bg_js)
-              logger.info(f'🔒 代理扩展已创建: {host}:{port} (用户: {user})')
-              return ext_dir
-
           # ═══════════════════════════════ 浏览器 ═══════════════════════════════
           def create_driver():
               options = Options()
@@ -497,14 +474,6 @@ jobs:
                           '--disable-blink-features=AutomationControlled',
                           'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36']:
                   options.add_argument(arg)
-
-              # 代理: 通过环境变量 PROXY 传入, 格式 hostname:port:username:password
-              proxy_raw = os.environ.get('PROXY', '').strip()
-              if proxy_raw:
-                  ext_dir = _build_proxy_extension(proxy_raw)
-                  if ext_dir:
-                      options.add_argument(f'--load-extension={ext_dir}')
-
               options.add_experimental_option('excludeSwitches', ['enable-automation'])
               options.add_experimental_option('useAutomationExtension', False)
               service = Service(ChromeDriverManager().install())
