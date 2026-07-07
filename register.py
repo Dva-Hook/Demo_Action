@@ -24,6 +24,71 @@ CDP_DEBUG_PORT = 9222
 CAPMONSTER_API_KEY = os.environ.get('CAPMONSTER_API_KEY', '')
 IMPLICIT_WAIT_SEC = 8
 
+# Anti-fingerprinting script injected via CDP before page load
+STEALTH_JS = """(function() {
+    'use strict';
+    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+    const plugins = [
+        {name:'Chrome PDF Plugin', filename:'internal-pdf-viewer', description:'Portable Document Format'},
+        {name:'Chrome PDF Viewer', filename:'mhjfbmdgcfjbbpaeojofohoefgiehjai', description:''},
+        {name:'Native Client', filename:'internal-nacl-plugin', description:''}];
+    const fakePlugins = Object.setPrototypeOf(plugins, PluginArray.prototype);
+    fakePlugins.item = i => plugins[i] || null;
+    fakePlugins.namedItem = name => plugins.find(p => p.name === name) || null;
+    fakePlugins.refresh = () => {};
+    const mimeData = [
+        {type:'application/pdf', suffixes:'pdf', plugin:fakePlugins[0]},
+        {type:'text/pdf', suffixes:'pdf', plugin:fakePlugins[0]},
+        {type:'application/x-nacl', suffixes:'', plugin:fakePlugins[2]},
+        {type:'application/x-pnacl', suffixes:'', plugin:fakePlugins[2]}];
+    const mimeTypes = Object.setPrototypeOf(mimeData.map(d => {
+        const mt = Object.create(MimeType.prototype);
+        mt.type = d.type; mt.suffixes = d.suffixes; mt.enabledPlugin = d.plugin;
+        return mt;
+    }), MimeTypeArray.prototype);
+    mimeTypes.item = i => mimeData[i] ? mimeTypes[i] : null;
+    mimeTypes.namedItem = name => mimeTypes.find(m => m.type === name) || null;
+    const origPD = Object.getOwnPropertyDescriptor(Navigator.prototype, 'plugins');
+    const origMD = Object.getOwnPropertyDescriptor(Navigator.prototype, 'mimeTypes');
+    if (origPD) Object.defineProperty(Navigator.prototype, 'plugins', {get: () => fakePlugins});
+    else Object.defineProperty(navigator, 'plugins', {get: () => fakePlugins});
+    if (origMD) Object.defineProperty(Navigator.prototype, 'mimeTypes', {get: () => mimeTypes});
+    const getParam = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(p) {
+        if (p === 37445) return 'Intel Inc.';
+        if (p === 37446) return 'Intel Iris OpenGL Engine';
+        return getParam.call(this, p);
+    };
+    Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
+    Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});
+    if (!window.chrome) window.chrome = {};
+    if (!window.chrome.runtime) window.chrome.runtime = {};
+    if (!window.chrome.loadTimes) window.chrome.loadTimes = () => ({
+        requestTime: Date.now()/1000, startLoadTime: Date.now()/1000, commitLoadTime: Date.now()/1000,
+        finishDocumentLoadTime: Date.now()/1000, finishLoadTime: Date.now()/1000,
+        firstPaintTime: Date.now()/1000-0.1, firstPaintAfterLoadTime: Date.now()/1000,
+        navigationType: 'Other', wasFetchedViaSpdy: true, wasNpnNegotiated: true,
+        npnNegotiatedProtocol: 'h2', wasAlternateProtocolAvailable: false, connectionInfo: 'h2'});
+    if (!window.chrome.csi) window.chrome.csi = () => ({startE: Date.now(), onloadT: Date.now(), pageT: Math.random()*100+50, tran: 15});
+    if (!window.chrome.app) window.chrome.app = {};
+    const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function() {
+        const ctx = this.getContext('2d');
+        if (ctx) { const id = ctx.getImageData(0, 0, 2, 2); if (id && id.data.length > 10) { id.data[0] ^= 1; ctx.putImageData(id, 0, 0); } }
+        return origToDataURL.apply(this, arguments);
+    };
+    const origQuery = navigator.permissions.query;
+    navigator.permissions.query = function(params) {
+        if (params.name === 'notifications') return Promise.resolve({state: Notification.permission, onchange: null});
+        return origQuery.call(this, params);
+    };
+    Object.defineProperty(screen, 'colorDepth', {get: () => 24});
+    Object.defineProperty(screen, 'pixelDepth', {get: () => 24});
+    delete window.callPhantom;
+    delete window._phantom;
+    delete window.__nightmare;
+})();"""
+
 FIRST_NAMES = ['Natha','Narin','Nan','Nahon','Nafeh','Naira','Nina','Myie','Myle','Minh','Musa','Mogan','Monia','Demris','Delnn','Deler','Deisi','Dera','Decon','Dayan','Aziah','Ayy','Avia','Anti','Akibi']
 LAST_NAMES = ['MEEZ','BUS','VGHN','PKS','DASON','SANO','NORIS','LOVE','SEE','CURY','PWERS','SCTZ','BAKER','GUAN','PAGE','MUZ','BAL','BBS','TER','GSS','FTZGD','STES','DOYLE','SHERN','SAURS','WSE','CON','GIL','ALO','GRER','PALA','SON','WATS','NUNZ','BOOE','COEZ']
 MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12']
@@ -675,6 +740,8 @@ def create_driver(proxy_local_port=None):
                 '--disable-blink-features=AutomationControlled',
                 'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36']:
         options.add_argument(arg)
+    options.add_argument('--lang=en-GB')
+    options.add_argument('--accept-lang=en-GB,en')
     if proxy_local_port:
         options.add_argument(f'--proxy-server=http://127.0.0.1:{proxy_local_port}')
         logger.info(f'🔒 Chrome 代理 → localhost:{proxy_local_port}')
@@ -684,7 +751,8 @@ def create_driver(proxy_local_port=None):
     options.add_experimental_option('useAutomationExtension', False)
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
-    driver.execute_script('Object.defineProperty(navigator, "webdriver", {get: () => undefined})')
+    # Inject anti-fingerprinting script before any page JavaScript runs
+    driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': STEALTH_JS})
     driver.implicitly_wait(IMPLICIT_WAIT_SEC)
     return driver
 
