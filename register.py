@@ -54,63 +54,71 @@ def _find_free_port():
         return s.getsockname()[1]
 
 def _parse_proxy_line(line):
-    """解析代理行. 返回 (host, port, user, pwd) 或 (host, port, None, None) 或 None."""
+    """Parse proxy line. Returns (protocol, host, port, user, pwd) or None. Default protocol is http."""
     line = line.strip()
     if not line: return None
+    # Detect protocol prefix: socks5:// https:// http://
+    protocol = 'http'
+    if '://' in line:
+        protocol, line = line.split('://', 1)
     parts = line.split(':')
     if len(parts) == 2:
         host, port = parts
         try: int(port)
-        except ValueError: logger.warning(f'代理端口无效: {line}'); return None
-        return (host, port, None, None)
+        except ValueError: logger.warning(f'Invalid proxy port: {line}'); return None
+        return (protocol, host, port, None, None)
     elif len(parts) == 4:
         host, port, user, pwd = parts
         try: int(port)
-        except ValueError: logger.warning(f'代理端口无效: {line}'); return None
-        return (host, port, user, pwd)
+        except ValueError: logger.warning(f'Invalid proxy port: {line}'); return None
+        return (protocol, host, port, user, pwd)
     else:
-        logger.warning(f'代理格式无效 (应为 host:port 或 host:port:user:pass): {line}')
+        logger.warning(f'Invalid proxy format (expected [protocol://]host:port[:user:pass]): {line}')
         return None
-
-_proxy_processes = []  # 进程清理列表
-atexit.register(lambda: [p.kill() for p in _proxy_processes if p.poll() is None])
-
 def _start_local_proxy(proxy_tuple, timeout=8):
-    """启动本地 pproxy 转发: Chrome → localhost:PORT → 上游代理. 返回 (local_port, proc) 或 (None, None)"""
-    host, port, user, pwd = proxy_tuple
+    """Start local pproxy forward: Chrome -> localhost:PORT -> upstream. Returns (local_port, proc) or (None, None)"""
+    protocol, host, port, user, pwd = proxy_tuple
     local_port = _find_free_port()
     if user and pwd:
-        upstream = f'http://{user}:{pwd}@{host}:{port}'
+        upstream = f'{protocol}://{user}:{pwd}@{host}:{port}'
     else:
-        upstream = f'http://{host}:{port}'
+        upstream = f'{protocol}://{host}:{port}'
 
-    logger.info(f'🔄 启动本地转发代理 localhost:{local_port} → {host}:{port}')
+    logger.info(f'Starting local proxy localhost:{local_port} -> {protocol}://{host}:{port}')
     try:
         proc = subprocess.Popen(
             ['python3', '-m', 'pproxy', '-l', f'http://:{local_port}', '-r', upstream],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )
         _proxy_processes.append(proc)
     except Exception as e:
-        logger.warning(f'⚠️ pproxy 启动失败: {e}')
+        logger.warning(f'pproxy start failed: {e}')
         return None, None
 
-    time.sleep(1.5)  # 等 pproxy 就绪
+    time.sleep(1.5)
 
-    # 验证本地转发链路
+    # Check if pproxy exited (startup failure)
+    if proc.poll() is not None:
+        stderr_out = proc.stderr.read().decode('utf-8', errors='replace').strip() if proc.stderr else ''
+        logger.warning(f'pproxy exited early (rc={proc.returncode}), stderr: {stderr_out[:300]}')
+        return None, None
+
+    # Validate local forward chain
     try:
         r = _req.get('http://httpbin.org/ip',
                      proxies={'http': f'http://127.0.0.1:{local_port}'},
                      timeout=timeout)
         ip = r.json().get('origin', 'unknown')
-        logger.info(f'✅ 代理链路正常，出口IP: {ip}')
+        logger.info(f'Proxy chain OK, exit IP: {ip}')
         return local_port, proc
     except Exception as e:
-        logger.warning(f'⚠️ 上游代理不可达 ({host}:{port}): {e}')
+        stderr_out = proc.stderr.read().decode('utf-8', errors='replace').strip() if proc.stderr else ''
+        logger.warning(f'Upstream proxy unreachable ({protocol}://{host}:{port}): {e}')
+        if stderr_out:
+            logger.warning(f'   pproxy stderr: {stderr_out[:300]}')
         try: proc.kill()
         except Exception: pass
         return None, None
-
 def _pick_proxy(strategy, job_index, proxies):
     """从代理列表中按策略选取一个代理. 返回原始字符串或 None."""
     if not proxies: return None
@@ -686,7 +694,7 @@ def main():
         if raw:
             parsed = _parse_proxy_line(raw)
             if parsed:
-                logger.info(f'🎯 选中代理 [{strategy}]: {parsed[0]}:{parsed[1]}')
+                logger.info(f'🎯 选中代理 [{strategy}]: {parsed[1]}:{parsed[2]}')
                 proxy_local_port, proxy_proc = _start_local_proxy(parsed)
                 if not proxy_local_port:
                     logger.warning('⚠️ 代理启动失败，回退直连')
