@@ -258,7 +258,7 @@ def _start_local_proxy(proxy_tuple, timeout=8):
             try: upstream_sock.close()
             except: pass
         except Exception as e:
-            logger.debug(f"Forward handler error: {e}")
+            logger.warning(f"Forward handler error: {e}")
             try: client_sock.close()
             except: pass
 
