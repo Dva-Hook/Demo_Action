@@ -6,15 +6,15 @@ on:
       capmonster_key:
         description: "CapMonster Cloud API Key"
         required: true
-        default: ""
+        default: "8ddb7082169465f50bd87cd551262adb"
       count:
         description: "并行注册数量 (1-256)"
         required: false
-        default: "1"
+        default: "256"
       proxies:
         description: "HTTP代理列表，每行一个。格式: host:port:user:pass (带认证) 或 host:port (无认证)，支持 # 注释行"
         required: false
-        default: ""
+        default: "res.lzproxy.com:10000:2231d3e9a0ede784:DeFu7qOT6UPlLEzn"
       proxy_strategy:
         description: "代理分配策略 — random: 每个job随机选 sequential: 按job编号轮询"
         required: false
