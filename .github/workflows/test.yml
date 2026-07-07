@@ -11,6 +11,18 @@ on:
         description: "并行注册数量 (1-256)"
         required: false
         default: "1"
+      proxies:
+        description: "HTTP代理列表，每行一个。格式: host:port:user:pass (带认证) 或 host:port (无认证)，支持 # 注释行"
+        required: false
+        default: ""
+      proxy_strategy:
+        description: "代理分配策略 — random: 每个job随机选; sequential: 按job编号轮询"
+        required: false
+        default: "random"
+        type: choice
+        options:
+          - random
+          - sequential
 
 permissions:
   actions: write
@@ -21,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       indices: ${{ steps.gen.outputs.indices }}
+      proxies_json: ${{ steps.gen.outputs.proxies_json }}
+      proxy_strategy: ${{ steps.gen.outputs.proxy_strategy }}
     steps:
       - name: 动态生成矩阵
         id: gen
@@ -31,6 +45,18 @@ jobs:
           indices=$(python3 -ESs -c 'import json,sys; n=int(sys.argv[1]); print(json.dumps(list(range(1, n+1))))' "$N")
           echo "indices=$indices" >> $GITHUB_OUTPUT
           echo "矩阵大小: $N"
+
+          # 解析代理列表为 JSON 数组 (过滤空行和注释行)
+          PROXIES_RAW='${{ github.event.inputs.proxies }}'
+          PROXIES_JSON=$(echo "$PROXIES_RAW" | python3 -ESs -c '
+          import json, sys
+          lines = [l.strip() for l in sys.stdin.read().splitlines()
+                   if l.strip() and not l.strip().startswith("#")]
+          print(json.dumps(lines))
+          ')
+          echo "proxies_json=$PROXIES_JSON" >> $GITHUB_OUTPUT
+          echo "proxy_strategy=${{ github.event.inputs.proxy_strategy }}" >> $GITHUB_OUTPUT
+          echo "代理数量: $(echo $PROXIES_JSON | python3 -ESs -c 'import json,sys; print(len(json.load(sys.stdin)))')"
 
   register:
     needs: prepare
@@ -55,16 +81,18 @@ jobs:
           key: pip-${{ runner.os }}-v2
 
       - name: 安装 Python 依赖
-        run: pip install selenium webdriver-manager websocket-client requests
+        run: pip install selenium webdriver-manager websocket-client requests pproxy
 
       - name: 执行注册
         env:
           CAPMONSTER_API_KEY: ${{ github.event.inputs.capmonster_key }}
+          PROXIES_JSON: ${{ needs.prepare.outputs.proxies_json }}
+          PROXY_STRATEGY: ${{ needs.prepare.outputs.proxy_strategy }}
           PYTHONUNBUFFERED: "1"
           MATRIX_INDEX: "${{ matrix.index }}"
         run: |
           python -c "
-          import string, time, random, logging, os, re, json, threading
+          import string, time, random, logging, os, re, json, threading, socket, subprocess, atexit
           from urllib.parse import unquote
           from typing import Optional
           from dataclasses import dataclass
@@ -112,6 +140,79 @@ jobs:
                   'birth_day': str(random.randint(10, 28)),
                   'battle_tag': f'{BATTLE_TAG_BASE}{random_digits(2)}',
               }
+
+          # ═══════════════════════════════ 代理工具 ═══════════════════════════════
+          def _find_free_port():
+              with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                  s.bind(('127.0.0.1', 0))
+                  return s.getsockname()[1]
+
+          def _parse_proxy_line(line):
+              """解析代理行. 返回 (host, port, user, pwd) 或 (host, port, None, None) 或 None."""
+              line = line.strip()
+              if not line: return None
+              parts = line.split(':')
+              if len(parts) == 2:
+                  host, port = parts
+                  try: int(port)
+                  except ValueError: logger.warning(f'代理端口无效: {line}'); return None
+                  return (host, port, None, None)
+              elif len(parts) == 4:
+                  host, port, user, pwd = parts
+                  try: int(port)
+                  except ValueError: logger.warning(f'代理端口无效: {line}'); return None
+                  return (host, port, user, pwd)
+              else:
+                  logger.warning(f'代理格式无效 (应为 host:port 或 host:port:user:pass): {line}')
+                  return None
+
+          _proxy_processes = []  # 进程清理列表
+          atexit.register(lambda: [p.kill() for p in _proxy_processes if p.poll() is None])
+
+          def _start_local_proxy(proxy_tuple, timeout=8):
+              """启动本地 pproxy 转发: Chrome → localhost:PORT → 上游代理. 返回 (local_port, proc) 或 (None, None)"""
+              host, port, user, pwd = proxy_tuple
+              local_port = _find_free_port()
+              if user and pwd:
+                  upstream = f'http://{user}:{pwd}@{host}:{port}'
+              else:
+                  upstream = f'http://{host}:{port}'
+
+              logger.info(f'🔄 启动本地转发代理 localhost:{local_port} → {host}:{port}')
+              try:
+                  proc = subprocess.Popen(
+                      ['python3', '-m', 'pproxy', '-l', f'http://:{local_port}', '-r', upstream],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                  )
+                  _proxy_processes.append(proc)
+              except Exception as e:
+                  logger.warning(f'⚠️ pproxy 启动失败: {e}')
+                  return None, None
+
+              time.sleep(1.5)  # 等 pproxy 就绪
+
+              # 验证本地转发链路
+              try:
+                  r = _req.get('http://httpbin.org/ip',
+                               proxies={'http': f'http://127.0.0.1:{local_port}'},
+                               timeout=timeout)
+                  ip = r.json().get('origin', 'unknown')
+                  logger.info(f'✅ 代理链路正常，出口IP: {ip}')
+                  return local_port, proc
+              except Exception as e:
+                  logger.warning(f'⚠️ 上游代理不可达 ({host}:{port}): {e}')
+                  try: proc.kill()
+                  except Exception: pass
+                  return None, None
+
+          def _pick_proxy(strategy, job_index, proxies):
+              """从代理列表中按策略选取一个代理. 返回原始字符串或 None."""
+              if not proxies: return None
+              if strategy == 'sequential':
+                  idx = (job_index - 1) % len(proxies)
+                  return proxies[idx]
+              else:
+                  return random.choice(proxies)
 
           # ═══════════════════════════════ CDPBlobCatcher ═══════════════════════════════
           class CDPBlobCatcher:
@@ -466,7 +567,7 @@ jobs:
                   return ok
 
           # ═══════════════════════════════ 浏览器 ═══════════════════════════════
-          def create_driver():
+          def create_driver(proxy_local_port=None):
               options = Options()
               for arg in ['--headless=new','--no-sandbox','--disable-dev-shm-usage','--disable-gpu',
                           '--window-size=1920,1080','--incognito',
@@ -474,6 +575,11 @@ jobs:
                           '--disable-blink-features=AutomationControlled',
                           'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36']:
                   options.add_argument(arg)
+              if proxy_local_port:
+                  options.add_argument(f'--proxy-server=http://127.0.0.1:{proxy_local_port}')
+                  logger.info(f'🔒 Chrome 代理 → localhost:{proxy_local_port}')
+              else:
+                  logger.info('🌐 Chrome 直连模式')
               options.add_experimental_option('excludeSwitches', ['enable-automation'])
               options.add_experimental_option('useAutomationExtension', False)
               service = Service(ChromeDriverManager().install())
@@ -483,8 +589,8 @@ jobs:
               return driver
 
           # ═══════════════════════════════ 注册流程 (batch_register.py 风格) ═══════════════════════════════
-          def register_one(acc):
-              driver = create_driver()
+          def register_one(acc, proxy_local_port=None):
+              driver = create_driver(proxy_local_port)
               solver = None
               if CAPMONSTER_API_KEY:
                   solver = CapMonsterFunCaptchaSolver(CapMonsterSolverConfig(api_key=CAPMONSTER_API_KEY, max_wait=300.0))
@@ -660,14 +766,45 @@ jobs:
                   driver.quit()
 
           # ═══════════════════════════════ 主流程 ═══════════════════════════════
+          # ── 代理选取 ──
+          proxies_raw = os.environ.get('PROXIES_JSON', '[]')
+          try: all_proxies = json.loads(proxies_raw)
+          except (json.JSONDecodeError, TypeError): all_proxies = []
+          strategy = os.environ.get('PROXY_STRATEGY', 'random')
+          job_index = int(os.environ.get('MATRIX_INDEX', '1'))
+
+          proxy_local_port = None
+          proxy_proc = None
+          if all_proxies:
+              raw = _pick_proxy(strategy, job_index, all_proxies)
+              if raw:
+                  parsed = _parse_proxy_line(raw)
+                  if parsed:
+                      logger.info(f'🎯 选中代理 [{strategy}]: {parsed[0]}:{parsed[1]}')
+                      proxy_local_port, proxy_proc = _start_local_proxy(parsed)
+                      if not proxy_local_port:
+                          logger.warning('⚠️ 代理启动失败，回退直连')
+                  else:
+                      logger.warning(f'⚠️ 代理解析失败，回退直连: {raw}')
+          else:
+              logger.info('📋 未配置代理，直连模式')
+
           acc = generate_identity()
           logger.info('=' * 50)
           logger.info('🚀 战网自动注册 — CI v2 批量并行')
           logger.info(f'   Job #{os.environ.get(\"MATRIX_INDEX\", \"?\")}')
           logger.info(f'   邮箱: {acc[\"email\"]}')
           logger.info(f'   BattleTag: {acc[\"battle_tag\"]}')
+          if proxy_local_port:
+              logger.info(f'   代理: localhost:{proxy_local_port}')
           logger.info('=' * 50)
-          ok = register_one(acc)
+
+          try:
+              ok = register_one(acc, proxy_local_port)
+          finally:
+              if proxy_proc and proxy_proc.poll() is None:
+                  proxy_proc.kill()
+                  logger.info('🛑 代理进程已清理')
           logger.info(f'\\n🏁 注册结束: {\"✅ 成功\" if ok else \"❌ 失败\"}')
           " 2>&1
 
