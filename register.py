@@ -166,7 +166,7 @@ def _start_local_proxy(proxy_tuple, timeout=8):
                     return
 
     def _handle_client(client_sock):
-        """Handle one client connection: parse CONNECT, connect upstream, forward."""
+        """Handle one client connection: CONNECT tunnel or HTTP proxy relay."""
         try:
             client_sock.settimeout(10)
             data = b""
@@ -176,73 +176,93 @@ def _start_local_proxy(proxy_tuple, timeout=8):
                     client_sock.close()
                     return
                 data += chunk
-                if len(data) > 16384:
+                if len(data) > 32768:
                     client_sock.close()
                     return
-            first_line = data.split(b"\r\n")[0].decode()
+
+            header_end = data.index(b"\r\n\r\n") + 4
+            body_remainder = data[header_end:]
+            header_bytes = data[:header_end]
+            first_line = header_bytes.split(b"\r\n")[0].decode()
             parts = first_line.split()
-            if len(parts) < 2 or parts[0] != "CONNECT":
-                client_sock.sendall(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+            if len(parts) < 2:
+                client_sock.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
                 client_sock.close()
                 return
-            target = parts[1].split(":")
-            target_host = target[0]
-            target_port = int(target[1]) if len(target) > 1 else 443
+
+            method = parts[0]
+
+            if method == "CONNECT":
+                target = parts[1].split(":")
+                target_host = target[0]
+                target_port = int(target[1]) if len(target) > 1 else 443
+                if protocol == "socks5":
+                    upstream_sock = _socks5_connect(target_host, target_port)
+                else:
+                    upstream_sock = _http_connect(target_host, target_port)
+                client_sock.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                client_sock.settimeout(None)
+                if body_remainder:
+                    try: upstream_sock.sendall(body_remainder)
+                    except: pass
+                _forward_pair(client_sock, upstream_sock)
+                return
+
+            # HTTP proxy relay (GET/POST/etc): parse target URL, connect upstream, relay
+            target_url = parts[1]
+            if "://" not in target_url:
+                client_sock.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+                client_sock.close()
+                return
+
+            from urllib.parse import urlparse as _urlparse
+            parsed = _urlparse(target_url)
+            target_host = parsed.hostname
+            target_port = parsed.port or 80
 
             if protocol == "socks5":
                 upstream_sock = _socks5_connect(target_host, target_port)
             else:
                 upstream_sock = _http_connect(target_host, target_port)
 
-            client_sock.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            # Rewrite request line to relative path
+            path = parsed.path or "/"
+            if parsed.query:
+                path += "?" + parsed.query
+            req_line = f"{method} {path} HTTP/1.1\r\n".encode()
+            # Keep original headers except Proxy-* headers
+            new_headers = []
+            for h in header_bytes.split(b"\r\n")[1:]:
+                if not h:
+                    continue
+                if h.lower().startswith(b"proxy-"):
+                    continue
+                new_headers.append(h)
+            new_header_block = req_line + b"\r\n".join(new_headers) + b"\r\n\r\n"
+            upstream_sock.sendall(new_header_block)
+            if body_remainder:
+                try: upstream_sock.sendall(body_remainder)
+                except: pass
             client_sock.settimeout(None)
-            _forward_pair(client_sock, upstream_sock)
+            # Relay response back (upstream -> client, unidirectional for HTTP)
+            while True:
+                try:
+                    chunk = upstream_sock.recv(32768)
+                    if not chunk:
+                        break
+                    client_sock.sendall(chunk)
+                except Exception:
+                    break
+            try: client_sock.close()
+            except: pass
+            try: upstream_sock.close()
+            except: pass
         except Exception as e:
             logger.debug(f"Forward handler error: {e}")
             try: client_sock.close()
             except: pass
 
-    logger.info(f'Starting local proxy localhost:{local_port} -> {protocol}://{host}:{port}')
-    try:
-        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind(("127.0.0.1", local_port))
-        server.listen(32)
-        server.settimeout(2.0)
-    except Exception as e:
-        logger.warning(f"Local proxy bind failed: {e}")
-        return None, None
 
-    def _accept_loop():
-        while getattr(_accept_loop, "_running", True):
-            try:
-                client, addr = server.accept()
-                t = threading.Thread(target=_handle_client, args=(client,), daemon=True)
-                t.start()
-            except socket.timeout:
-                continue
-            except Exception:
-                break
-        try: server.close()
-        except: pass
-    _accept_loop._running = True
-    t = threading.Thread(target=_accept_loop, daemon=True)
-    t.start()
-
-    # Validate local forward chain
-    try:
-        r = _req.get("http://httpbin.org/ip",
-                     proxies={"http": f"http://127.0.0.1:{local_port}"},
-                     timeout=timeout)
-        ip = r.json().get("origin", "unknown")
-        logger.info(f"Proxy chain OK, exit IP: {ip}")
-        return local_port, t
-    except Exception as e:
-        logger.warning(f"Upstream proxy unreachable ({protocol}://{host}:{port}): {e}")
-        _accept_loop._running = False
-        try: server.close()
-        except: pass
-        return None, None
 def _pick_proxy(strategy, job_index, proxies):
     """从代理列表中按策略选取一个代理. 返回原始字符串或 None."""
     if not proxies: return None
