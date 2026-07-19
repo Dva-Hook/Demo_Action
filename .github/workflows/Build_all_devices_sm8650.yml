@@ -444,6 +444,7 @@ jobs:
           fi
 
       - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler 支持)
+        if: ${{ env.ENABLE_ADIOS == 'true' }}
         working-directory: kernel_workspace/common
         run: |
           echo "开始添加 ADIOS I/O 调度器支持..."

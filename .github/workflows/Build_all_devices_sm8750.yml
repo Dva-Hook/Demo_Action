@@ -51,12 +51,6 @@ on:
         default: true
         type: boolean
       
-      enable_scx:
-        description: "添加完美风驰"
-        required: true
-        default: true
-        type: boolean
-
       enable_bbg:
         description: "添加BBG基带守护"
         required: true
@@ -121,7 +115,6 @@ jobs:
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
       ENABLE_REKERNEL:        ${{ github.event.inputs.enable_ReKernel }}
       ENABLE_ADIOS:           ${{ github.event.inputs.enable_Adios }}
-      ENABLE_SCX:             ${{ github.event.inputs.enable_scx }}
       ENABLE_BBG:             ${{ github.event.inputs.enable_bbg }}
       ENABLE_SERIALID_CHECK:  ${{ github.event.inputs.enable_serialid_check }}
       ENABLE_DROIDSPACES:     ${{ github.event.inputs.enable_droidspaces }}
@@ -450,15 +443,9 @@ jobs:
 
       - name: 🔧 Apply Sched Patch (应用完美风驰补丁)
         run: |
-          # Droidspaces 依赖 SCX，启用 Droidspaces 时强制走 SCX 路径
-          FORCE_SCX=false
-          if [ "${{ env.ENABLE_DROIDSPACES }}" = "true" ] && [ "${{ env.ENABLE_SCX }}" != "true" ]; then
-            echo "::notice::Droidspaces 依赖完美风驰 (SCX)，已自动启用 SCX 补丁"
-            FORCE_SCX=true
-          fi
           if [ "$SCHED_FILE" = "none" ]; then
             echo "该机型自带风驰，跳过所有补丁应用"
-          elif [ "${{ env.ENABLE_SCX }}" = "true" ] || [ "$FORCE_SCX" = "true" ]; then
+          else
             cd kernel_workspace/common
             if [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICES_NAME}" = "realme_GT7" ] || [ "${DEVICES_NAME}" = "oneplus_pad_2" ]; then
               git clone https://github.com/Numbersf/SCHED_PATCH.git -b "mt6991"
@@ -476,14 +463,6 @@ jobs:
               echo "❌ 未匹配到补丁，风驰补丁暂未支持该机型"
               exit 11
             fi
-          else
-            echo "未启用风驰，则需应用OGKI转换GKI补丁"
-            cd kernel_workspace/common
-            sed -i '1iobj-y += hmbird_patch.o' drivers/Makefile
-            cp "${GITHUB_WORKSPACE}/.github/workflows/Bin/hmbird_patch.patch" ./hmbird_patch.patch
-            echo "正在打OGKI转换GKI补丁"
-            patch -p1 -F 3 < hmbird_patch.patch
-            echo "OGKI转换GKI_patch完成"
           fi
           
       - name: 🛠 Set SerialID Check (添加SerialID校验)
@@ -1034,9 +1013,7 @@ jobs:
           if [ "${{ github.event.inputs.enable_Adios }}" = "true" ]; then
             FEATURES="${FEATURES}- ✅ ADIOS IO调度器"$'\n'
           fi
-          if [ "${{ github.event.inputs.enable_scx }}" = "true" ] || [ "${{ github.event.inputs.enable_droidspaces }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ 完美风驰 (SCX)"$'\n'
-          fi
+          FEATURES="${FEATURES}- ✅ 完美风驰 (SCX)"$'\n'
           if [ "${{ github.event.inputs.enable_bbg }}" = "true" ]; then
             FEATURES="${FEATURES}- ✅ BBG 基带守护"$'\n'
           fi
