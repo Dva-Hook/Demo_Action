@@ -35,11 +35,14 @@ on:
           - OP NORD CE4
           - OP NORD 5
           - OP NORD CE5
+          - OP NORD 6
           - OP PAD
+          - OP PAD PRO
           - OP PAD LITE
           - OP PAD2
           - OP PAD2 PRO
           - OP PAD3
+          - OP PAD4
           - OP PAD GO 2
           - OP OPEN
           - OPPO FIND N5
@@ -48,6 +51,7 @@ on:
           - OPPO FIND X8 ULTRA
           - OPPO FIND X9
           - OPPO FIND X9 PRO
+          - OPPO FIND X9 ULTRA
           - OPPO RENO 15 PRO
           - Realme GT5 PRO
           - Realme GT7 PRO
@@ -101,82 +105,32 @@ jobs:
       
       - name: 📦 Install dependencies (安装依赖)
         run: pip install httpx beautifulsoup4
+
+      - name: 🛠️ Install payload-dumper (安装解包工具)
+        run: pip install git+https://github.com/5ec1cff/payload-dumper
       
       - name: 🔗 Get OTA Download URL (获取OTA下载链接)
         id: get_ota
+        env:
+          OTA_DEVICE: ${{ inputs.device }}
+          OTA_REGION: ${{ inputs.region }}
+          OTA_VERSION_INDEX: ${{ inputs.version_index }}
         run: |
-          python3 << 'PYEOF'
-          import httpx
-          import json
-          import os
-          import re
-          from bs4 import BeautifulSoup
-          
-          device = "${{ inputs.device }}"
-          region = "${{ inputs.region }}"
-          version_index = ${{ inputs.version_index }}
-          
-          url = "https://roms.danielspringer.at/index.php?view=ota"
-          resp = httpx.get(url, follow_redirects=True)
-          resp.raise_for_status()
-          
-          soup = BeautifulSoup(resp.text, 'html.parser')
-          select = soup.find('select', id='device')
-          devices = json.loads(select['data-devices'])
-          
-          if device not in devices:
-              raise Exception(f"Device '{device}' not found")
-          
-          device_regions = devices[device]
-          if region not in device_regions:
-              raise Exception(f"Region '{region}' not available for '{device}'")
-          
-          versions = device_regions[region]
-          if not versions:
-              raise Exception(f"No versions for '{device}' in '{region}'")
-          
-          if version_index >= len(versions):
-              raise Exception(f"Version index {version_index} out of range (0-{len(versions)-1})")
-          
-          version = versions[version_index]
-          print(f"Selected: {device} | {region} | {version}")
-          
-          post_data = {
-              "device": device,
-              "region": region,
-              "version_index": str(version_index)
-          }
-          
-          post_resp = httpx.post(url, data=post_data, follow_redirects=True)
-          post_resp.raise_for_status()
-          
-          post_soup = BeautifulSoup(post_resp.text, 'html.parser')
-          
-          download_url = None
-          for a in post_soup.find_all('a', href=True):
-              href = a['href']
-              if any(kw in href.lower() for kw in ['download', 'ota', 'firmware', 'update', '.zip']):
-                  if href.startswith('http'):
-                      download_url = href
-                      break
-          
-          if not download_url:
-              for a in post_soup.find_all('a', href=True):
-                  href = a['href']
-                  if href.startswith('http'):
-                      download_url = href
-                      break
-          
-          if not download_url:
-              with open('response_debug.html', 'w') as f:
-                  f.write(post_resp.text)
-              raise Exception("Could not find download URL. Check response_debug.html")
-          
-          print(f"Download URL: {download_url}")
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'ota_url={download_url}\n')
-              f.write(f'version={version}\n')
-          PYEOF
+          python3 tools/resolve_ota.py \
+            --device "$OTA_DEVICE" \
+            --region "$OTA_REGION" \
+            --version-index "$OTA_VERSION_INDEX" \
+            --debug-dir .ota-debug \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: 📤 Upload OTA resolver diagnostics (上传 OTA 解析诊断)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-resolver-diagnostics
+          path: .ota-debug/
+          retention-days: 3
+          if-no-files-found: ignore
       
       - name: 📋 Show OTA Info (显示OTA信息)
         run: |
@@ -186,9 +140,6 @@ jobs:
           echo "- **地区**: ${{ inputs.region }}" >> $GITHUB_STEP_SUMMARY
           echo "- **版本**: ${{ steps.get_ota.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **OTA URL**: \`${{ steps.get_ota.outputs.ota_url }}\`" >> $GITHUB_STEP_SUMMARY
-      
-      - name: 🛠️ Install payload-dumper (安装解包工具)
-        run: pip install git+https://github.com/5ec1cff/payload-dumper
       
       - name: 📂 Extract partitions (提取分区镜像)
         run: |
