@@ -184,13 +184,13 @@ jobs:
           if [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
              oneplus_pad_2_pro)
-                DEFAULT_SUFFIX='-android15-8-g096cdb6ecefc-ab14358676-4k'
+                DEFAULT_SUFFIX='-android15-8-g2e6b9c3812c5-ab15114928-4k'
               ;;
             oneplus_ace5_ultra)
-                DEFAULT_SUFFIX='-android15-8-ge6068c2aa11d-abogki454747580-4k'
+                DEFAULT_SUFFIX='-android15-8-ge58033dc8ea6-abogki498046332-4k'
               ;;
             oneplus_13 | oneplus_13t | oneplus_ace5_pro | oneplus_ace_6 | oneplus_pad_2 | realme_GT7 | realme_GT7pro_Speed | realme_GT8)
-                DEFAULT_SUFFIX='-android15-8-g7e1f3c083cc6-abogki467167594-4k'
+                DEFAULT_SUFFIX='-android15-8-g93e223c276e7-abogki500782043-4k'
               ;;
             realme_GT7pro)
                 DEFAULT_SUFFIX='-android15-8-gf4dc45704e54-abogki446052083-4k'
@@ -210,13 +210,13 @@ jobs:
           if [ -z "${{ github.event.inputs.custom_kernel_time }}" ]; then
             case "${{ env.DEVICES_NAME }}" in
               oneplus_pad_2_pro)
-                  KERNEL_TIME='Tue Oct 28 09:04:21 UTC 2025'
+                  KERNEL_TIME='Mon Mar 30 10:41:25 UTC 2026'
                 ;;
               oneplus_ace5_ultra)
-                  KERNEL_TIME='Tue Jul 1 19:48:18 UTC 2025'
+                  KERNEL_TIME='Sun Mar 29 12:31:26 UTC 2026'
                 ;;
               oneplus_13 | oneplus_13t | oneplus_ace5_pro | oneplus_ace_6 | oneplus_pad_2 |realme_GT7 | realme_GT7pro_Speed | realme_GT8)
-                  KERNEL_TIME='Mon Dec 8 04:00:43 UTC 2025'
+                  KERNEL_TIME='Wed Apr  8 15:08:30 UTC 2026'
                 ;;
               realme_GT7pro)
                   KERNEL_TIME='Fri Sep 19 06:13:40 UTC 2025'
