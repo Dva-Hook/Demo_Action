@@ -121,6 +121,8 @@ jobs:
       ENABLE_KSU:             ${{ github.event.inputs.enable_ksu }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
       ACE5PRO_SOURCE_COMMIT:  386808c1de0dc56f00e7b6505a722737ed628e6f
+      ONEPLUS13T_SOURCE_COMMIT: 16fe7f198aae3506e9087737b1398c12a3fcf86f
+      ONEPLUS13_SOURCE_COMMIT:  9f334ee47b7f91b1a7528344876cddb79784e705
     outputs:
       ksuver: ${{ steps.ksu_step.outputs.ksuver }}
     steps:
@@ -255,11 +257,21 @@ jobs:
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6991/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip && 
             mv "android_kernel_oneplus_mt6991-oneplus-${REPO_MANIFEST}" common
-          elif [ "${DEVICES_NAME}" = "oneplus_ace5_pro" ] || [ "${DEVICES_NAME}" = "oneplus_13" ]; then
+          elif [ "${DEVICES_NAME}" = "oneplus_ace5_pro" ]; then
             echo "固定 OnePlus Ace 5 Pro 源码提交: ${ACE5PRO_SOURCE_COMMIT}"
             aria2c -s16 -x16 -k1M "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/${ACE5PRO_SOURCE_COMMIT}.zip" -o common.zip
             unzip -q common.zip &&
             mv "android_kernel_common_oneplus_sm8750-${ACE5PRO_SOURCE_COMMIT}" common
+          elif [ "${DEVICES_NAME}" = "oneplus_13t" ]; then
+            echo "固定 OnePlus 13T 源码提交: ${ONEPLUS13T_SOURCE_COMMIT}"
+            aria2c -s16 -x16 -k1M "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/${ONEPLUS13T_SOURCE_COMMIT}.zip" -o common.zip
+            unzip -q common.zip &&
+            mv "android_kernel_common_oneplus_sm8750-${ONEPLUS13T_SOURCE_COMMIT}" common
+          elif [ "${DEVICES_NAME}" = "oneplus_13" ]; then
+            echo "固定 OnePlus 13 源码提交: ${ONEPLUS13_SOURCE_COMMIT}"
+            aria2c -s16 -x16 -k1M "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/${ONEPLUS13_SOURCE_COMMIT}.zip" -o common.zip
+            unzip -q common.zip &&
+            mv "android_kernel_common_oneplus_sm8750-${ONEPLUS13_SOURCE_COMMIT}" common
           else
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip && 
