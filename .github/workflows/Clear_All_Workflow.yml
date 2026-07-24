@@ -153,7 +153,6 @@ jobs:
             WF_NAME=$(echo "$wf" | jq -r '.name')
             cleanup_workflow "$WF_ID" "$WF_NAME"
           done
-
           if [[ "${WORKFLOW_NAME^^}" != "ALL" ]]; then
             echo ""
             echo "========== 清理本工作流历史记录 =========="
