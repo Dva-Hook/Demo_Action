@@ -153,8 +153,6 @@ jobs:
             WF_NAME=$(echo "$wf" | jq -r '.name')
             cleanup_workflow "$WF_ID" "$WF_NAME"
           done
-
-          # 如果不是 ALL 模式，额外清理本工作流的历史记录（不含当前 run）
           if [[ "${WORKFLOW_NAME^^}" != "ALL" ]]; then
             echo ""
             echo "========== 清理本工作流历史记录 =========="
