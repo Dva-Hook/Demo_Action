@@ -57,11 +57,6 @@ on:
         default: true
         type: boolean
       
-      enable_droidspaces:
-        description: "添加 Droidspaces"
-        required: true
-        default: false
-        type: boolean
 
       enable_serialid_check:
         description: "添加SerialID校验"
@@ -117,12 +112,9 @@ jobs:
       ENABLE_ADIOS:           ${{ github.event.inputs.enable_Adios }}
       ENABLE_BBG:             ${{ github.event.inputs.enable_bbg }}
       ENABLE_SERIALID_CHECK:  ${{ github.event.inputs.enable_serialid_check }}
-      ENABLE_DROIDSPACES:     ${{ github.event.inputs.enable_droidspaces }}
       ENABLE_KSU:             ${{ github.event.inputs.enable_ksu }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
-      ACE5PRO_SOURCE_COMMIT:  386808c1de0dc56f00e7b6505a722737ed628e6f
-      ONEPLUS13T_SOURCE_COMMIT: 16fe7f198aae3506e9087737b1398c12a3fcf86f
-      ONEPLUS13_SOURCE_COMMIT:  9f334ee47b7f91b1a7528344876cddb79784e705
+
     outputs:
       ksuver: ${{ steps.ksu_step.outputs.ksuver }}
     steps:
@@ -257,21 +249,11 @@ jobs:
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6991/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip && 
             mv "android_kernel_oneplus_mt6991-oneplus-${REPO_MANIFEST}" common
-          elif [ "${DEVICES_NAME}" = "oneplus_ace5_pro" ]; then
-            echo "固定 OnePlus Ace 5 Pro 源码提交: ${ACE5PRO_SOURCE_COMMIT}"
-            aria2c -s16 -x16 -k1M "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/${ACE5PRO_SOURCE_COMMIT}.zip" -o common.zip
+          elif [ "${DEVICES_NAME}" = "oneplus_ace5_pro" ] || [ "${DEVICES_NAME}" = "oneplus_13t" ] || [ "${DEVICES_NAME}" = "oneplus_13" ]; then
+            echo "使用 xkse4 源码分支: oneplus/${REPO_MANIFEST}"
+            aria2c -s16 -x16 -k1M "https://github.com/xkse4/android_kernel_common_oneplus_sm8750/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip" -o common.zip
             unzip -q common.zip &&
-            mv "android_kernel_common_oneplus_sm8750-${ACE5PRO_SOURCE_COMMIT}" common
-          elif [ "${DEVICES_NAME}" = "oneplus_13t" ]; then
-            echo "固定 OnePlus 13T 源码提交: ${ONEPLUS13T_SOURCE_COMMIT}"
-            aria2c -s16 -x16 -k1M "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/${ONEPLUS13T_SOURCE_COMMIT}.zip" -o common.zip
-            unzip -q common.zip &&
-            mv "android_kernel_common_oneplus_sm8750-${ONEPLUS13T_SOURCE_COMMIT}" common
-          elif [ "${DEVICES_NAME}" = "oneplus_13" ]; then
-            echo "固定 OnePlus 13 源码提交: ${ONEPLUS13_SOURCE_COMMIT}"
-            aria2c -s16 -x16 -k1M "https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/${ONEPLUS13_SOURCE_COMMIT}.zip" -o common.zip
-            unzip -q common.zip &&
-            mv "android_kernel_common_oneplus_sm8750-${ONEPLUS13_SOURCE_COMMIT}" common
+            mv "android_kernel_common_oneplus_sm8750-oneplus-${REPO_MANIFEST}" common
           else
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip && 
@@ -302,9 +284,6 @@ jobs:
           echo "CCACHE_MAXSIZE=10G" >> $GITHUB_ENV
           # 根据影响源码的功能开关生成缓存变体后缀，避免不同变体互相污染
           CACHE_VARIANT=""
-          if [ "${{ env.ENABLE_DROIDSPACES }}" = "true" ]; then
-            CACHE_VARIANT="${CACHE_VARIANT}-ds"
-          fi
           echo "CACHE_VARIANT=$CACHE_VARIANT" >> $GITHUB_ENV
           echo "当前构建内核机型：${{ env.DEVICES_NAME }}，缓存变体：${CACHE_VARIANT:-(无)}"
           echo "当前磁盘空间："
@@ -605,47 +584,6 @@ jobs:
           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
           patch -p1 -N -F 3 < 69_hide_stuff.patch || true
           echo "[OK] SUSFS 补丁处理流程全部完成"
-          
-      - name: 🔧 Add Droidspaces Support (添加 Droidspaces 支持)
-        if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
-        working-directory: kernel_workspace/common
-        run: |
-          echo "==> 开始添加 Droidspaces 支持"
-          patch_file="Droidspaces_6.6.patch"
-          patch_path="${GITHUB_WORKSPACE}/patch/${patch_file}"
-          
-          if [ ! -f "$patch_path" ]; then
-            echo "::error::Patch 不存在: $patch_path"
-            exit 1
-          fi
-          
-          echo "==> 正在应用: $patch_file"
-          if patch -p1 --forward < "$patch_path"; then
-            echo "==> Patch 应用成功: $patch_file"
-          else
-            echo "::error::Patch 应用失败: $patch_file"
-            exit 1
-          fi
-          echo "==> Droidspaces patch 添加完成"
-
-      - name: 🔧 Apply ntsync Patch (应用 ntsync 补丁)
-        if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
-        working-directory: kernel_workspace/common
-        run: |
-          echo "==> 开始应用 ntsync 补丁..."
-          for PATCH_NAME in "ntsync_base.patch" "ntsync_compat_6.6.patch"; do
-            PATCH_PATH="${GITHUB_WORKSPACE}/patch/${PATCH_NAME}"
-            if [ ! -f "$PATCH_PATH" ]; then
-              echo "::error::未找到 ntsync 补丁: $PATCH_PATH"
-              exit 1
-            fi
-            echo "  应用: $PATCH_NAME"
-            dos2unix "$PATCH_PATH"
-            if ! git apply --ignore-whitespace "$PATCH_PATH"; then
-              echo "::warning::补丁 $PATCH_NAME 应用失败，可能已应用或上下文不匹配"
-            fi
-          done
-          echo "==> ntsync 补丁应用完成"
 
       - name: 🔧 Set gki_defconfig (设置编译配置) 
         run: |
@@ -678,24 +616,8 @@ jobs:
           else
             echo "未启用KSU，将不会集成Root及SUSFS"
           fi
-          if [ "${{ env.ENABLE_DROIDSPACES }}" == 'true' ];then
-            echo "应用Droidspaces推荐配置"
-            echo "CONFIG_SYSVIPC=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_POSIX_MQUEUE=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_IPC_NS=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_PID_NS=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_DEVTMPFS=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_NETFILTER_XT_TARGET_REJECT=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_NETFILTER_XT_TARGET_LOG=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_NETFILTER_XT_MATCH_RECENT=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_IP_SET=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_IP_SET_HASH_IP=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_IP_SET_HASH_NET=y" >> ./common/arch/arm64/configs/gki_defconfig
-            echo "CONFIG_NETFILTER_XT_SET=y" >> ./common/arch/arm64/configs/gki_defconfig
-            # ntsync 驱动 (Droidspaces 配套组件)
-            echo "CONFIG_NTSYNC=y" >> ./common/arch/arm64/configs/gki_defconfig
-          fi
+
+
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
 
@@ -1035,9 +957,7 @@ jobs:
           if [ "${{ github.event.inputs.enable_bbg }}" = "true" ]; then
             FEATURES="${FEATURES}- ✅ BBG 基带守护"$'\n'
           fi
-          if [ "${{ github.event.inputs.enable_droidspaces }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ Droidspaces 容器支持"$'\n'
-          fi
+
           if [ "${{ github.event.inputs.enable_ksu }}" = "true" ]; then
             FEATURES="${FEATURES}- ✅ 集成ReSukiSU"$'\n'
           fi
