@@ -442,6 +442,8 @@ jobs:
         run: |
           if [ "$SCHED_FILE" = "none" ]; then
             echo "该机型自带风驰，跳过所有补丁应用"
+          elif [ "${DEVICES_NAME}" = "oneplus_ace5_pro" ] || [ "${DEVICES_NAME}" = "oneplus_13t" ] || [ "${DEVICES_NAME}" = "oneplus_13" ]; then
+            echo "该机型使用 xkse4 源码（已包含风驰修改），跳过补丁应用"
           else
             cd kernel_workspace/common
             if [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICES_NAME}" = "realme_GT7" ] || [ "${DEVICES_NAME}" = "oneplus_pad_2" ]; then
