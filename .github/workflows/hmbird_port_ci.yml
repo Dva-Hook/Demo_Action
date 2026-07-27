@@ -1,0 +1,103 @@
+name: HMBIRD Y700 6.6.89 CI
+
+on:
+  push:
+    branches:
+      - codex/hmbird-y700-6.6.89
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            aria2 bc bison build-essential cpio flex libelf-dev libssl-dev \
+            pahole python3 unzip xz-utils zstd
+
+      - name: Download source and toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p kernel_workspace/common kernel_workspace/clang18
+          cd kernel_workspace
+          aria2c -s16 -x16 -k1M \
+            'https://github.com/showdo/Build_Lenovo_sm8750/releases/download/common/2025-06.tar.gz' \
+            -o common.tar.gz
+          printf '%s  %s\n' \
+            'ac27c6a2a4aaf368e2f2a754d121256548ed4f17ca8ae44a0a0f5c60e19c776f' \
+            'common.tar.gz' | sha256sum -c -
+          tar -xzf common.tar.gz -C common
+          aria2c -s16 -x16 -k1M \
+            'https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip' \
+            -o clang.zip
+          printf '%s  %s\n' \
+            '1221635c13d02c5f0c8abb93f38f5d43f5e2f86906ae2e18894ce63e90264164' \
+            'clang.zip' | sha256sum -c -
+          unzip -q clang.zip -d clang18
+          aria2c -s16 -x16 -k1M \
+            'https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip' \
+            -o build-tools.zip
+          printf '%s  %s\n' \
+            '9a1a48cdbaababdfbbec9bee06198c60eb12369188b0f24428fb790c488d00ec' \
+            'build-tools.zip' | sha256sum -c -
+          unzip -q build-tools.zip
+
+      - name: Apply and validate HMBIRD patch
+        run: |
+          set -euo pipefail
+          PATCH="$GITHUB_WORKSPACE/patch/fengchi_y700_aosp_6.6.89.patch"
+          test -s "$PATCH"
+          cd kernel_workspace/common
+          patch --batch --forward --fuzz=0 --dry-run -p1 < "$PATCH"
+          patch --batch --forward --fuzz=0 -p1 < "$PATCH"
+          ! find . \( -name '*.rej' -o -name '*.orig' \) -print -quit | grep -q .
+          grep -q '^CONFIG_HMBIRD_SCHED=y$' arch/arm64/configs/gki_defconfig
+          grep -q '^CONFIG_HMBIRD_OPLUS_COMPAT=y$' arch/arm64/configs/gki_defconfig
+          grep -q '^CONFIG_UDMABUF=y$' arch/arm64/configs/gki_defconfig
+
+      - name: Build Image
+        run: |
+          set -euo pipefail
+          export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang18/bin:$GITHUB_WORKSPACE/kernel_workspace/build-tools/bin:$PATH"
+          cd kernel_workspace/common
+          make -j"$(nproc)" LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            O=out KCFLAGS+='-O2 -Wno-error' gki_defconfig \
+            2>&1 | tee "$GITHUB_WORKSPACE/hmbird-build.log"
+          grep -q '^CONFIG_HMBIRD_SCHED=y$' out/.config
+          grep -q '^CONFIG_HMBIRD_OPLUS_COMPAT=y$' out/.config
+          grep -q '^CONFIG_UDMABUF=y$' out/.config
+          make -j"$(nproc)" LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+            O=out KCFLAGS+='-O2 -Wno-error' Image \
+            2>&1 | tee -a "$GITHUB_WORKSPACE/hmbird-build.log"
+          test -s out/arch/arm64/boot/Image
+          test -s out/Module.symvers
+
+      - name: Verify Y700 sched-walt KMI
+        run: |
+          python3 tools/check_module_symvers.py check \
+            --symvers kernel_workspace/common/out/Module.symvers \
+            --reference tests/fixtures/y700_sched_walt_versions.json
+
+      - name: Upload build evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: hmbird-y700-build-evidence
+          if-no-files-found: warn
+          include-hidden-files: true
+          retention-days: 7
+          path: |
+            hmbird-build.log
+            kernel_workspace/common/out/.config
+            kernel_workspace/common/out/Module.symvers
+            kernel_workspace/common/out/arch/arm64/boot/Image

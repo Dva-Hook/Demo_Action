@@ -1,380 +1,250 @@
-name: 批量内核信息提取
+name: 批量最新内核信息提取
 
 on:
   workflow_dispatch:
     inputs:
       version_index:
-        description: '版本号索引 (0=最新, 1=次新, 以此类推)'
+        description: '版本索引 (0=最新，1=次新)'
         required: true
         type: number
         default: 0
+      workers:
+        description: 'payload-dumper 并行线程数'
+        required: false
+        type: number
+        default: 4
 
 jobs:
   extract-kernel-info:
-    name: Extract Kernel Info
+    name: Extract ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
+      max-parallel: 2
       matrix:
-        device:
-          - "OP 13"
-          - "OP 13T"
-          - "OP ACE 6"
-          - "OP ACE 5 PRO"
-          - "OP ACE 5 ULTRA"
-          - "OP PAD2 PRO"
-          - "Realme GT7 PRO"
-    
+        include:
+          - target: OnePlus 13
+            slug: 01-oneplus-13
+            site_device: OP 13
+            region: CN
+            supported: true
+          - target: OnePlus 13T
+            slug: 02-oneplus-13t
+            site_device: OP 13T
+            region: CN
+            supported: true
+          - target: OnePlus Ace 5 Pro
+            slug: 03-oneplus-ace5-pro
+            site_device: OP ACE 5 PRO
+            region: CN
+            supported: true
+          - target: OnePlus Ace 5 Ultra
+            slug: 04-oneplus-ace5-ultra
+            site_device: OP ACE 5 ULTRA
+            region: CN
+            supported: true
+          - target: OnePlus Ace 6
+            slug: 05-oneplus-ace6
+            site_device: OP ACE 6
+            region: CN
+            supported: true
+          - target: OnePlus Pad 2
+            slug: 06-oneplus-pad2
+            site_device: OP PAD2
+            region: IN
+            supported: true
+          - target: OnePlus Pad 2 Pro
+            slug: 07-oneplus-pad2-pro
+            site_device: OP PAD2 PRO
+            region: CN
+            supported: true
+          - target: Realme GT7 Pro
+            slug: 08-realme-gt7-pro
+            site_device: Realme GT7 PRO
+            region: CN
+            supported: true
+
     steps:
-      - name: 🔧 Set up Python (设置Python环境)
+      - name: 📥 Checkout (检出代码)
+        if: matrix.supported == true
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Python (设置 Python 环境)
+        if: matrix.supported == true
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      
-      - name: 📦 Install dependencies (安装依赖)
-        run: pip install httpx beautifulsoup4
-      
-      - name: 🛠️ Install payload-dumper (安装解包工具)
-        run: pip install git+https://github.com/5ec1cff/payload-dumper
-      
-      - name: 🔗 Get OTA URL (获取OTA下载链接)
+
+      - name: 📦 Install extraction dependencies (安装提取依赖)
+        if: matrix.supported == true
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lz4 zstd
+          python3 -m pip install httpx beautifulsoup4
+          python3 -m pip install git+https://github.com/5ec1cff/payload-dumper
+
+      - name: 🔗 Resolve OTA URL (解析 OTA 下载链接)
         id: get_ota
+        if: matrix.supported == true
+        continue-on-error: true
+        env:
+          OTA_DEVICE: ${{ matrix.site_device }}
+          OTA_REGION: ${{ matrix.region }}
+          OTA_VERSION_INDEX: ${{ inputs.version_index }}
         run: |
-          python3 << 'PYEOF'
-          import httpx
-          import json
-          import os
-          from bs4 import BeautifulSoup
-          
-          device = "${{ matrix.device }}"
-          region = "CN"
-          version_index = ${{ inputs.version_index }}
-          
-          url = "https://roms.danielspringer.at/index.php?view=ota"
-          resp = httpx.get(url, follow_redirects=True)
-          resp.raise_for_status()
-          
-          soup = BeautifulSoup(resp.text, 'html.parser')
-          select = soup.find('select', id='device')
-          devices = json.loads(select['data-devices'])
-          
-          if device not in devices:
-              print(f"❌ Device '{device}' not found")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f'ota_url=\n')
-              exit(0)
-          
-          device_regions = devices[device]
-          if region not in device_regions:
-              print(f"❌ Region '{region}' not available for '{device}'")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f'ota_url=\n')
-              exit(0)
-          
-          versions = device_regions[region]
-          if not versions:
-              print(f"❌ No versions for '{device}' in '{region}'")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f'ota_url=\n')
-              exit(0)
-          
-          if version_index >= len(versions):
-              print(f"❌ Version index {version_index} out of range")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f'ota_url=\n')
-              exit(0)
-          
-          version = versions[version_index]
-          print(f"📱 Selected: {device} | {region} | {version}")
-          
-          post_data = {
-              "device": device,
-              "region": region,
-              "version_index": str(version_index)
-          }
-          
-          post_resp = httpx.post(url, data=post_data, follow_redirects=True)
-          post_resp.raise_for_status()
-          
-          post_soup = BeautifulSoup(post_resp.text, 'html.parser')
-          
-          download_url = None
-          for a in post_soup.find_all('a', href=True):
-              href = a['href']
-              if any(kw in href.lower() for kw in ['download', 'ota', 'firmware', 'update', '.zip']):
-                  if href.startswith('http'):
-                      download_url = href
-                      break
-          
-          if not download_url:
-              for a in post_soup.find_all('a', href=True):
-                  href = a['href']
-                  if href.startswith('http'):
-                      download_url = href
-                      break
-          
-          if not download_url:
-              print(f"❌ Could not find download URL for {device}")
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-                  f.write(f'ota_url=\n')
-                  f.write(f'version={version}\n')
-              exit(0)
-          
-          print(f"🔗 Download URL: {download_url}")
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'ota_url={download_url}\n')
-              f.write(f'version={version}\n')
-          PYEOF
-      
-      - name: 📂 Extract boot partition (提取boot分区)
-        id: extract
-        run: |
-          OTA_URL="${{ steps.get_ota.outputs.ota_url }}"
-          VERSION="${{ steps.get_ota.outputs.version }}"
-          DEVICE="${{ matrix.device }}"
-          
-          if [ -z "$OTA_URL" ]; then
-            echo "::warning::OTA URL not found for $DEVICE"
-            echo "result=${DEVICE}|❌ OTA URL not found|Unknown" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          echo "📱 Device: $DEVICE"
-          echo "📦 Version: $VERSION"
-          echo "🔗 URL: $OTA_URL"
-          
-          mkdir -p ./output
-          
-          payload_dumper \
-            --partitions boot \
-            --workers 4 \
-            --out ./output \
-            "$OTA_URL"
-          
-          if [ ! -f "./output/boot.img" ]; then
-            echo "result=${DEVICE}|❌ boot.img extraction failed|Unknown" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          echo "✅ boot.img extracted successfully"
-          echo "result=${DEVICE}|SUCCESS|${VERSION}" >> $GITHUB_OUTPUT
-      
-      - name: 🔍 Extract Kernel Info (提取内核信息)
-        id: kernel_info
-        run: |
-          DEVICE="${{ matrix.device }}"
-          VERSION="${{ steps.get_ota.outputs.version }}"
-          BOOT_IMG="./output/boot.img"
-          
-          if [ ! -f "$BOOT_IMG" ]; then
-            echo "::warning::boot.img not found for $DEVICE"
-            echo "result=${DEVICE}|❌ boot.img not found|Unknown" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          python3 << 'PYEOF'
-          import subprocess
-          import re
-          import os
-          import struct
-          
-          boot_img_path = "./output/boot.img"
-          kernel_version = None
-          kernel_time = None
-          
-          def search_version(text):
-              global kernel_version, kernel_time
-              
-              match = re.search(
-                  r'Linux version (\S+)\s+\([^)]+\)\s+\([^)]+\)\s+#1\s+SMP\s+PREEMPT\s+(.+)',
-                  text
-              )
-              if match:
-                  kernel_version = match.group(1)
-                  kernel_time = match.group(2).strip()
-                  return True
-              
-              ver_match = re.search(r'Linux\s+version\s+(\d+\.\d+\.\d+-[^\s]+)', text)
-              if not ver_match:
-                  ver_match = re.search(r'(\d+\.\d+\.\d+-android\d+-[^\s]+)', text)
-              
-              if ver_match:
-                  kernel_version = ver_match.group(1)
-                  time_match = re.search(
-                      r'#1\s+SMP\s+PREEMPT\s+((?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\w+\s+\d+\s+[\d:]+\s+\w+\s+\d{4})',
-                      text
-                  )
-                  if time_match:
-                      kernel_time = time_match.group(1)
-                  return True
-              return False
-          
-          result = subprocess.run(['strings', boot_img_path], capture_output=True, text=True)
-          if search_version(result.stdout):
-              print("✅ Found via strings scan")
-          else:
-              with open(boot_img_path, 'rb') as f:
-                  boot_data = f.read()
-              
-              kernel_offset = 0
-              kernel_size = len(boot_data)
-              
-              if boot_data[:8] == b'ANDROID!':
-                  hdr_ver = struct.unpack('<I', boot_data[16:20])[0]
-                  kernel_size = struct.unpack('<I', boot_data[8:12])[0]
-                  if hdr_ver <= 2:
-                      page_size = struct.unpack('<I', boot_data[36:40])[0]
-                      kernel_offset = page_size
-                  elif hdr_ver >= 3:
-                      kernel_offset = 1580
-              
-              kernel_data = boot_data[kernel_offset:kernel_offset + kernel_size]
-              decompressed = None
-              
-              try:
-                  import gzip, io
-                  gz_start = kernel_data.find(b'\x1f\x8b')
-                  if gz_start >= 0:
-                      with gzip.GzipFile(fileobj=io.BytesIO(kernel_data[gz_start:])) as gz:
-                          decompressed = gz.read()
-                      print("✅ Decompressed with gzip")
-              except Exception as e:
-                  print(f"gzip failed: {e}")
-              
-              if decompressed is None:
-                  try:
-                      lz4_start = kernel_data.find(b'\x04\x22\x4d\x18')
-                      if lz4_start >= 0:
-                          with open('/tmp/kernel.lz4', 'wb') as f:
-                              f.write(kernel_data[lz4_start:])
-                          result = subprocess.run(
-                              ['lz4', '-d', '-f', '/tmp/kernel.lz4', '/tmp/vmlinux'],
-                              capture_output=True
-                          )
-                          if result.returncode == 0:
-                              with open('/tmp/vmlinux', 'rb') as f:
-                                  decompressed = f.read()
-                              print("✅ Decompressed with lz4")
-                  except Exception as e:
-                      print(f"lz4 failed: {e}")
-              
-              if decompressed is None:
-                  try:
-                      zstd_start = kernel_data.find(b'\x28\xb5\x2f\xfd')
-                      if zstd_start >= 0:
-                          with open('/tmp/kernel.zst', 'wb') as f:
-                              f.write(kernel_data[zstd_start:])
-                          result = subprocess.run(
-                              ['zstd', '-d', '-f', '/tmp/kernel.zst', '-o', '/tmp/vmlinux'],
-                              capture_output=True
-                          )
-                          if result.returncode == 0:
-                              with open('/tmp/vmlinux', 'rb') as f:
-                                  decompressed = f.read()
-                              print("✅ Decompressed with zstd")
-                  except Exception as e:
-                      print(f"zstd failed: {e}")
-              
-              if decompressed:
-                  text = decompressed.decode('utf-8', errors='ignore')
-                  if search_version(text):
-                      print("✅ Found in decompressed kernel")
-                  else:
-                      print("❌ Kernel info not found in decompressed data")
-              else:
-                  print("❌ All decompression methods failed")
-          
-          device = "${{ matrix.device }}"
-          if kernel_version:
-              result_str = f"{device}|{kernel_version}|{kernel_time or 'Unknown'}"
-              print(f"\n✅ {device}: {kernel_version} | {kernel_time or 'Unknown'}")
-          else:
-              result_str = f"{device}|❌ Extraction failed|Unknown"
-              print(f"\n❌ {device}: Could not extract kernel info")
-          
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'result={result_str}\n')
-          PYEOF
-      
-      - name: 💾 Save result to file (保存结果到文件)
-        id: save_result
-        run: |
-          RESULT="${{ steps.kernel_info.outputs.result }}"
-          DEVICE=$(echo "$RESULT" | cut -d'|' -f1)
-          KERNEL=$(echo "$RESULT" | cut -d'|' -f2)
-          TIME=$(echo "$RESULT" | cut -d'|' -f3)
-          
-          mkdir -p ./results
-          SAFE_DEVICE=$(echo "${{ matrix.device }}" | tr ' ' '_')
-          echo "$DEVICE|$KERNEL|$TIME" > "./results/${SAFE_DEVICE}.txt"
-          echo "safe_device=${SAFE_DEVICE}" >> $GITHUB_OUTPUT
-      
-      - name: 📤 Upload individual result (上传单个结果)
+          python3 tools/resolve_ota.py \
+            --device "$OTA_DEVICE" \
+            --region "$OTA_REGION" \
+            --version-index "$OTA_VERSION_INDEX" \
+            --debug-dir .ota-debug \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: 📤 Upload OTA resolver diagnostics (上传 OTA 解析诊断)
+        if: matrix.supported == true && steps.get_ota.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-info-${{ steps.save_result.outputs.safe_device }}
-          path: results/${{ steps.save_result.outputs.safe_device }}.txt
+          name: ota-resolver-diagnostics-${{ matrix.slug }}
+          path: .ota-debug/
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: 📂 Extract boot partition (提取 boot 分区)
+        id: extract
+        if: matrix.supported == true && steps.get_ota.outcome == 'success'
+        env:
+          OTA_URL: ${{ steps.get_ota.outputs.ota_url }}
+          WORKERS: ${{ inputs.workers }}
+        run: |
+          mkdir -p output
+          if [ -z "$OTA_URL" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::warning::Resolved OTA URL is empty"
+          elif python3 tools/payload_dumper_compat.py \
+              --partitions boot \
+              --workers "$WORKERS" \
+              --out ./output \
+              "$OTA_URL" && [ -f ./output/boot.img ]; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "boot.img extracted successfully"
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::warning::boot.img extraction failed"
+          fi
+
+      - name: 🔍 Extract kernel info (提取内核信息)
+        id: kernel_info
+        if: matrix.supported == true && steps.extract.outputs.status == 'success'
+        continue-on-error: true
+        run: |
+          python3 tools/extract_kernel_info.py \
+            ./output/boot.img \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: 💾 Save target result (保存目标结果)
+        id: save_result
+        if: always()
+        env:
+          TARGET: ${{ matrix.target }}
+          SLUG: ${{ matrix.slug }}
+          SITE_DEVICE: ${{ matrix.site_device }}
+          REGION: ${{ matrix.region }}
+          RESOLVE_OUTCOME: ${{ steps.get_ota.outcome }}
+          EXTRACT_STATUS: ${{ steps.extract.outputs.status }}
+          KERNEL_OUTCOME: ${{ steps.kernel_info.outcome }}
+          KERNEL_FOUND: ${{ steps.kernel_info.outputs.found }}
+          OTA_VERSION: ${{ steps.get_ota.outputs.version }}
+          KERNEL_VERSION: ${{ steps.kernel_info.outputs.kernel_version }}
+          KERNEL_TIME: ${{ steps.kernel_info.outputs.kernel_time }}
+        run: |
+          STATUS="SUCCESS"
+          if [ "$RESOLVE_OUTCOME" != "success" ]; then
+            STATUS="OTA_RESOLUTION_FAILED"
+          elif [ "$EXTRACT_STATUS" != "success" ]; then
+            STATUS="BOOT_EXTRACTION_FAILED"
+          elif [ "$KERNEL_OUTCOME" != "success" ]; then
+            STATUS="KERNEL_INFO_FAILED"
+          elif [ "$KERNEL_FOUND" != "true" ]; then
+            STATUS="KERNEL_INFO_NOT_FOUND"
+          fi
+
+          [ -n "$OTA_VERSION" ] || OTA_VERSION="Unknown"
+          [ -n "$KERNEL_VERSION" ] || KERNEL_VERSION="Unknown"
+          [ -n "$KERNEL_TIME" ] || KERNEL_TIME="Unknown"
+
+          mkdir -p results
+          printf '%s|%s|%s|%s|%s|%s|%s\n' \
+            "$TARGET" \
+            "$SITE_DEVICE" \
+            "$REGION" \
+            "$OTA_VERSION" \
+            "$KERNEL_VERSION" \
+            "$KERNEL_TIME" \
+            "$STATUS" \
+            > results/result.txt
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Upload target result (上传目标结果)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-info-${{ matrix.slug }}
+          path: results/result.txt
           retention-days: 7
+          if-no-files-found: error
 
   merge-results:
     name: Merge Results (合并结果)
     needs: extract-kernel-info
+    if: always()
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: 📥 Download all artifacts (下载所有产物)
+      - name: 📥 Download target results (下载目标结果)
         uses: actions/download-artifact@v4
         with:
+          pattern: kernel-info-*
           path: ./all-results
-      
-      - name: 🔀 Merge results into single file (合并结果为单个文件)
+
+      - name: 🔀 Build reports (生成报告)
         run: |
-          mkdir -p ./final-output
-          
-          echo "=========================================" > ./final-output/kernel_info_report.txt
-          echo "     批量内核信息提取报告" >> ./final-output/kernel_info_report.txt
-          echo "=========================================" >> ./final-output/kernel_info_report.txt
-          echo "" >> ./final-output/kernel_info_report.txt
-          echo "提取时间: $(date '+%Y-%m-%d %H:%M:%S')" >> ./final-output/kernel_info_report.txt
-          echo "地区版本: CN" >> ./final-output/kernel_info_report.txt
-          echo "版本索引: ${{ inputs.version_index }}" >> ./final-output/kernel_info_report.txt
-          echo "" >> ./final-output/kernel_info_report.txt
-          echo "-----------------------------------------" >> ./final-output/kernel_info_report.txt
-          printf "%-25s | %-35s | %s\n" "设备型号" "内核版本" "构建时间" >> ./final-output/kernel_info_report.txt
-          echo "-----------------------------------------" >> ./final-output/kernel_info_report.txt
-          
-          SUMMARY_MD="### 📊 批量内核信息提取报告"
-          SUMMARY_MD+=$'\n\n'
-          SUMMARY_MD+="**地区版本**: CN  "
-          SUMMARY_MD+=$'\n'
-          SUMMARY_MD+="**版本索引**: ${{ inputs.version_index }}  "
-          SUMMARY_MD+=$'\n'
-          SUMMARY_MD+="**提取时间**: $(date '+%Y-%m-%d %H:%M:%S')"
-          SUMMARY_MD+=$'\n\n'
-          SUMMARY_MD+="| 设备型号 | 内核版本 | 构建时间 |"
-          SUMMARY_MD+=$'\n'
-          SUMMARY_MD+="|----------|----------|----------|"
-          
-          for file in ./all-results/kernel-info-*/*.txt; do
-            if [ -f "$file" ]; then
-              LINE=$(cat "$file")
-              DEVICE=$(echo "$LINE" | cut -d'|' -f1)
-              KERNEL=$(echo "$LINE" | cut -d'|' -f2)
-              TIME=$(echo "$LINE" | cut -d'|' -f3)
-              
-              printf "%-25s | %-35s | %s\n" "$DEVICE" "$KERNEL" "$TIME" >> ./final-output/kernel_info_report.txt
-              
-              SUMMARY_MD+="| $DEVICE | \`$KERNEL\` | $TIME |"$'\n'
-            fi
-          done
-          
-          echo "" >> ./final-output/kernel_info_report.txt
-          echo "=========================================" >> ./final-output/kernel_info_report.txt
-          
-          echo "$SUMMARY_MD" >> $GITHUB_STEP_SUMMARY
-      
+          mkdir -p final-output
+          REPORT_MD=./final-output/kernel_info_report.md
+          REPORT_TXT=./final-output/kernel_info_report.txt
+
+          {
+            echo "# 批量最新内核信息提取报告"
+            echo
+            echo "- 提取时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "- 版本索引: ${{ inputs.version_index }}"
+            echo "- 地区: 按目标设备映射"
+            echo
+            echo "| 目标机型 | OTA 目录设备 | 地区 | OTA 版本 | 内核版本 | 构建时间 | 状态 |"
+            echo "|---|---|---|---|---|---|---|"
+          } > "$REPORT_MD"
+
+          echo "目标机型|OTA目录设备|地区|OTA版本|内核版本|构建时间|状态" > "$REPORT_TXT"
+
+          while IFS= read -r -d '' file; do
+            IFS='|' read -r TARGET SITE_DEVICE REGION OTA_VERSION KERNEL BUILD_TIME STATUS < "$file"
+            printf '| %s | %s | %s | `%s` | `%s` | %s | %s |\n' \
+              "$TARGET" "$SITE_DEVICE" "$REGION" "$OTA_VERSION" "$KERNEL" "$BUILD_TIME" "$STATUS" \
+              >> "$REPORT_MD"
+            cat "$file" >> "$REPORT_TXT"
+          done < <(find ./all-results -name result.txt -print0 | sort -z)
+
+          {
+            echo
+            echo "状态说明："
+            echo "- \`SUCCESS\`: 已提取最新 OTA 的 boot.img 和内核信息。"
+            echo "- 其它状态：对应阶段发生解析、下载或内核识别错误。"
+          } >> "$REPORT_MD"
+
+          cat "$REPORT_MD" >> "$GITHUB_STEP_SUMMARY"
+
       - name: 📤 Upload merged report (上传合并报告)
         uses: actions/upload-artifact@v4
         with:
           name: kernel-info-complete-report
-          path: final-output/kernel_info_report.txt
+          path: final-output/
           retention-days: 30
+          if-no-files-found: error
