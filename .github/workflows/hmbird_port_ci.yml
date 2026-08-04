@@ -80,12 +80,20 @@ jobs:
             O=out KCFLAGS+='-O2 -Wno-error' Image \
             2>&1 | tee -a "$GITHUB_WORKSPACE/hmbird-build.log"
           test -s out/arch/arm64/boot/Image
-          test -s out/Module.symvers
+          if [ -s out/Module.symvers ]; then
+            HMBIRD_SYMVERS="$PWD/out/Module.symvers"
+          elif [ -s out/vmlinux.symvers ]; then
+            HMBIRD_SYMVERS="$PWD/out/vmlinux.symvers"
+          else
+            echo "::error::No kernel symbol-version file was generated"
+            exit 1
+          fi
+          printf 'HMBIRD_SYMVERS=%s\n' "$HMBIRD_SYMVERS" >> "$GITHUB_ENV"
 
       - name: Verify Y700 sched-walt KMI
         run: |
           python3 tools/check_module_symvers.py check \
-            --symvers kernel_workspace/common/out/Module.symvers \
+            --symvers "$HMBIRD_SYMVERS" \
             --reference tests/fixtures/y700_sched_walt_versions.json
 
       - name: Upload build evidence
@@ -100,4 +108,5 @@ jobs:
             hmbird-build.log
             kernel_workspace/common/out/.config
             kernel_workspace/common/out/Module.symvers
+            kernel_workspace/common/out/vmlinux.symvers
             kernel_workspace/common/out/arch/arm64/boot/Image

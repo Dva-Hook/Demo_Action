@@ -12,6 +12,55 @@ diff --git a/arch/arm64/configs/gki_defconfig b/arch/arm64/configs/gki_defconfig
  CONFIG_IRQ_TIME_ACCOUNTING=y
  CONFIG_TASKSTATS=y
  CONFIG_TASK_DELAY_ACCT=y
+diff --git a/Documentation/scheduler/hmbird.rst b/Documentation/scheduler/hmbird.rst
+new file mode 100644
+--- /dev/null
++++ b/Documentation/scheduler/hmbird.rst
+@@ -0,0 +1,33 @@
++======
++HMBIRD
++======
++
++HMBIRD is an optional scheduling class for latency-sensitive Android workloads.
++It is built when ``CONFIG_HMBIRD_SCHED`` is enabled and uses scheduling policy
++number ``SCHED_HMBIRD`` (7).  Tasks enter the class only while the HMBIRD
++controller is active; disabling the controller moves them back to the normal
++scheduler before the class is marked inactive.
++
++Control ABI
++===========
++
++The root-only control and diagnostic ABI is under ``/proc/hmbird_sched``.
++``abi_version`` and ``actual_state`` allow a userspace controller to verify the
++kernel interface and current state.  ``scx_enable`` accepts only ``0`` or ``1``.
++When heartbeat supervision is enabled, userspace must update ``heartbeat``;
++the watchdog disables HMBIRD after the configured timeout so that controller
++death does not leave the alternate scheduler active.
++
++The ABI is intended for a privileged service.  Control files are mode 0600 and
++diagnostic files are read-only.  A controller should verify ``abi_version``,
++enable heartbeat supervision before activating HMBIRD, and synchronously write
++``0`` to ``scx_enable`` during shutdown or rollback.
++
++Lifecycle
++=========
++
++Boot-time state is allocated and initialized before it is published through
++Android OEM data slots.  If allocation is incomplete, the scheduler remains
++disabled and no partial per-CPU state is published.  Runtime enable and disable
++are serialized by the HMBIRD control path, while watchdog expiry provides the
++fail-closed transition back to the regular scheduler.
+diff --git a/Documentation/scheduler/index.rst b/Documentation/scheduler/index.rst
+--- a/Documentation/scheduler/index.rst
++++ b/Documentation/scheduler/index.rst
+@@ -10,6 +10,7 @@
+     sched-arch
+     sched-bwc
+     sched-deadline
++    hmbird
+     sched-design-CFS
+     sched-domains
+     sched-capacity
 diff --git a/include/asm-generic/vmlinux.lds.h b/include/asm-generic/vmlinux.lds.h
 --- a/include/asm-generic/vmlinux.lds.h
 +++ b/include/asm-generic/vmlinux.lds.h
@@ -626,7 +675,7 @@ diff --git a/kernel/Kconfig.preempt b/kernel/Kconfig.preempt
  
 +config HMBIRD_SCHED
 +	bool "HMBIRD scheduling class"
-+	depends on SMP && CGROUP_SCHED && CPUSETS && ANDROID_VENDOR_OEM_DATA
++	depends on SMP && CGROUP_SCHED && CPUSETS && ANDROID_VENDOR_OEM_DATA && PROC_FS
 +	help
 +	  Build the HMBIRD scheduler class between fair and idle. Per-task and
 +	  per-runqueue state is stored through Android OEM data slots so the
@@ -1500,7 +1549,7 @@ diff --git a/kernel/sched/hmbird/hmbird.c b/kernel/sched/hmbird/hmbird.c
 new file mode 100644
 --- /dev/null
 +++ b/kernel/sched/hmbird/hmbird.c
-@@ -0,0 +1,4476 @@
+@@ -0,0 +1,4543 @@
 +// SPDX-License-Identifier: GPL-2.0
 +
 +/*
@@ -1524,7 +1573,7 @@ new file mode 100644
 +#define CLUSTER_SEPARATE
 +
 +atomic_t __hmbird_ops_enabled = ATOMIC_INIT(0);
-+atomic_t non_hmbird_task;
++atomic_t non_hmbird_task = ATOMIC_INIT(true);
 +atomic_t hmbird_module_loaded = ATOMIC_INIT(0);
 +DEFINE_XARRAY(hmbird_cgroup_deadlines);
 +static int sched_prop_to_preempt_prio[HMBIRD_TASK_PROP_MAX] = {0};
@@ -2075,11 +2124,11 @@ new file mode 100644
 +
 +	if ((dsq->id & HMBIRD_DSQ_FLAG_BUILTIN) &&
 +		((dsq->id & 0xff) >= GDSQS_ID_BASE) &&
-+		((dsq->id & 0xff) < MAX_GLOBAL_DSQS))
++		((dsq->id & 0xff) < (GDSQS_ID_BASE + MAX_GLOBAL_DSQS)))
 +		return GLOBAL_DSQ;
 +
 +	if ((dsq->id & HMBIRD_DSQ_FLAG_BUILTIN) &&
-+		((dsq->id & 0xff) >= MAX_GLOBAL_DSQS) &&
++		((dsq->id & 0xff) >= (GDSQS_ID_BASE + MAX_GLOBAL_DSQS)) &&
 +		((dsq->id & 0xff) < max_hmbird_dsq_internal_id))
 +		return PCP_DSQ;
 +
@@ -2166,13 +2215,33 @@ new file mode 100644
 +	return false;
 +}
 +
-+static void init_isolate_cpus(void)
++static void free_isolate_cpus(void)
 +{
-+	WARN_ON(!alloc_cpumask_var(&iso_masks.ex_free, GFP_KERNEL));
-+	WARN_ON(!alloc_cpumask_var(&iso_masks.partial, GFP_KERNEL));
-+	WARN_ON(!alloc_cpumask_var(&iso_masks.exclusive, GFP_KERNEL));
-+	WARN_ON(!alloc_cpumask_var(&iso_masks.big, GFP_KERNEL));
-+	WARN_ON(!alloc_cpumask_var(&iso_masks.little, GFP_KERNEL));
++	free_cpumask_var(iso_masks.ex_free);
++	free_cpumask_var(iso_masks.partial);
++	free_cpumask_var(iso_masks.exclusive);
++	free_cpumask_var(iso_masks.big);
++	free_cpumask_var(iso_masks.little);
++#ifdef CONFIG_CPUMASK_OFFSTACK
++	iso_masks.ex_free = NULL;
++	iso_masks.partial = NULL;
++	iso_masks.exclusive = NULL;
++	iso_masks.big = NULL;
++	iso_masks.little = NULL;
++#endif
++}
++
++static bool init_isolate_cpus(void)
++{
++	if (!zalloc_cpumask_var(&iso_masks.ex_free, GFP_KERNEL) ||
++	    !zalloc_cpumask_var(&iso_masks.partial, GFP_KERNEL) ||
++	    !zalloc_cpumask_var(&iso_masks.exclusive, GFP_KERNEL) ||
++	    !zalloc_cpumask_var(&iso_masks.big, GFP_KERNEL) ||
++	    !zalloc_cpumask_var(&iso_masks.little, GFP_KERNEL)) {
++		free_isolate_cpus();
++		return false;
++	}
++
 +	cpumask_set_cpu(0, iso_masks.big);
 +	cpumask_set_cpu(1, iso_masks.big);
 +	cpumask_set_cpu(2, iso_masks.big);
@@ -2181,6 +2250,7 @@ new file mode 100644
 +	cpumask_set_cpu(5, iso_masks.ex_free);
 +	cpumask_set_cpu(6, iso_masks.partial);
 +	cpumask_set_cpu(7, iso_masks.ex_free);
++	return true;
 +}
 +
 +extern spinlock_t css_set_lock;
@@ -5735,7 +5805,8 @@ new file mode 100644
 +		struct hmbird_entity *entity;
 +
 +		dsq = &gdsqs[i];
-+		raw_spin_lock(&dsq->lock);
++		if (!raw_spin_trylock(&dsq->lock))
++			continue;
 +		if (list_empty(&dsq->fifo)) {
 +			raw_spin_unlock(&dsq->lock);
 +			continue;
@@ -5896,7 +5967,11 @@ new file mode 100644
 +{
 +	int cpu;
 +	u32 v;
-+	struct hmbird_entity *init_hmbird;
++	struct hmbird_entity *init_hmbird = NULL;
++	struct hmbird_boot_cpu_state {
++		struct hmbird_rq *hrq;
++		struct hmbird_ops *ops;
++	} *cpu_states = NULL;
 +
 +	/*
 +	 * The following is to prevent the compiler from optimizing out the enum
@@ -5908,80 +5983,121 @@ new file mode 100644
 +
 +	init_dsq(&hmbird_dsq_global, HMBIRD_DSQ_GLOBAL);
 +	init_dsq_at_boot();
-+	init_isolate_cpus();
++	if (!init_isolate_cpus())
++		goto err_free_boot_state;
 +	hb_timer_init();
 +	init_sched_prop_to_preempt_prio();
 +#ifdef CONFIG_SMP
-+	WARN_ON(!alloc_cpumask_var(&idle_masks.cpu, GFP_KERNEL));
-+	WARN_ON(!alloc_cpumask_var(&idle_masks.smt, GFP_KERNEL));
++	if (!zalloc_cpumask_var(&idle_masks.cpu, GFP_KERNEL) ||
++	    !zalloc_cpumask_var(&idle_masks.smt, GFP_KERNEL))
++		goto err_free_boot_state;
 +#endif
++
++	cpu_states = kcalloc(nr_cpu_ids, sizeof(*cpu_states), GFP_KERNEL);
++	if (!cpu_states)
++		goto err_free_boot_state;
 +
 +	/*
 +	 * we can't static init init_task's hmbird struct, init here.
 +	 * init_task->hmbird would not use during boot.
 +	 */
 +	init_hmbird = kzalloc(sizeof(struct hmbird_entity), GFP_KERNEL);
-+	init_task.android_oem_data1[HMBIRD_TS_IDX] = (u64)init_hmbird;
-+	if (init_hmbird) {
-+		INIT_LIST_HEAD(&init_hmbird->dsq_node.fifo);
-+		INIT_LIST_HEAD(&init_hmbird->watchdog_node);
-+		init_hmbird->sticky_cpu = -1;
-+		init_hmbird->holding_cpu = -1;
-+		atomic64_set(&init_hmbird->ops_state, 0);
-+		init_hmbird->runnable_at = jiffies;
++	if (!init_hmbird)
++		goto err_free_boot_state;
++	INIT_LIST_HEAD(&init_hmbird->dsq_node.fifo);
++	INIT_LIST_HEAD(&init_hmbird->watchdog_node);
++	init_hmbird->sticky_cpu = -1;
++	init_hmbird->holding_cpu = -1;
++	atomic64_set(&init_hmbird->ops_state, 0);
++	init_hmbird->runnable_at = jiffies;
 +#ifdef CONFIG_SCHED_CORE
-+		init_hmbird->core_sched_at = sched_clock();
++	init_hmbird->core_sched_at = sched_clock();
 +#endif
-+		init_hmbird->slice = HMBIRD_SLICE_DFL;
-+		init_hmbird->task = &init_task;
-+		hmbird_set_sched_prop(&init_task, 0);
-+	} else {
-+		hmbird_err(INIT_TASK_FAIL, "<fatal>:alloc init_task.scx failed!!!\n");
-+	}
++	init_hmbird->slice = HMBIRD_SLICE_DFL;
++	init_hmbird->task = &init_task;
 +
 +	for_each_possible_cpu(cpu) {
 +		struct rq *rq = cpu_rq(cpu);
++		struct hmbird_rq *hrq;
++		struct hmbird_ops *ops;
 +
-+		/*
-+		 * exec during boot phase, no need to care about alloc failed.
-+		 * lifecycle same to rq, no need to free.
-+		 */
-+		rq->android_oem_data1[HMBIRD_RQ_IDX] =
-+			(u64)kzalloc(sizeof(struct hmbird_rq), GFP_KERNEL);
-+		if (get_hmbird_rq(rq)) {
-+			get_hmbird_rq(rq)->rq = rq;
-+			get_hmbird_rq(rq)->srq = &per_cpu(hmbird_sched_rq_stats, cpu);
-+			get_hmbird_rq(rq)->srq->sched_ravg_window_ptr = &hmbird_sched_ravg_window;
-+		} else {
-+			hmbird_err(ALLOC_RQSCX_FAIL, "<fatal>:alloc rq->scx failed!!!\n");
-+		}
++		cpu_states[cpu].hrq = kzalloc(sizeof(struct hmbird_rq), GFP_KERNEL);
++		hrq = cpu_states[cpu].hrq;
++		if (!hrq)
++			goto err_free_boot_state;
++		hrq->rq = rq;
++		hrq->srq = &per_cpu(hmbird_sched_rq_stats, cpu);
++		hrq->srq->sched_ravg_window_ptr = &hmbird_sched_ravg_window;
 +
-+		rq->android_oem_data1[HMBIRD_OPS_IDX] =
-+				(u64)kzalloc(sizeof(struct hmbird_ops), GFP_KERNEL);
-+		if (!get_hmbird_ops(rq))
-+			pr_err("fatal error : alloc get_hmbird_ops(rq) failed!!!\n");
-+		init_dsq(&get_hmbird_rq(rq)->local_dsq, HMBIRD_DSQ_LOCAL);
-+		INIT_LIST_HEAD(&get_hmbird_rq(rq)->watchdog_list);
++		cpu_states[cpu].ops = kzalloc(sizeof(struct hmbird_ops), GFP_KERNEL);
++		ops = cpu_states[cpu].ops;
++		if (!ops)
++			goto err_free_boot_state;
++		init_dsq(&hrq->local_dsq, HMBIRD_DSQ_LOCAL);
++		INIT_LIST_HEAD(&hrq->watchdog_list);
 +
-+		WARN_ON(!zalloc_cpumask_var(&get_hmbird_rq(rq)->cpus_to_kick, GFP_KERNEL));
-+		WARN_ON(!zalloc_cpumask_var(&get_hmbird_rq(rq)->cpus_to_preempt, GFP_KERNEL));
-+		WARN_ON(!zalloc_cpumask_var(&get_hmbird_rq(rq)->cpus_to_wait, GFP_KERNEL));
++		if (!zalloc_cpumask_var(&hrq->cpus_to_kick, GFP_KERNEL) ||
++		    !zalloc_cpumask_var(&hrq->cpus_to_preempt, GFP_KERNEL) ||
++		    !zalloc_cpumask_var(&hrq->cpus_to_wait, GFP_KERNEL))
++			goto err_free_boot_state;
 +
-+		hmbird_ops_init(get_hmbird_ops(rq));
++		hmbird_ops_init(ops);
 +	}
++
++	/* Publish only after every boot-lifetime object is fully initialized. */
++	init_task.android_oem_data1[HMBIRD_TS_IDX] = (u64)init_hmbird;
++	hmbird_set_sched_prop(&init_task, 0);
++	for_each_possible_cpu(cpu) {
++		struct rq *rq = cpu_rq(cpu);
++
++		rq->android_oem_data1[HMBIRD_RQ_IDX] =
++			(u64)cpu_states[cpu].hrq;
++		rq->android_oem_data1[HMBIRD_OPS_IDX] =
++			(u64)cpu_states[cpu].ops;
++	}
++	kfree(cpu_states);
 +
 +	INIT_DELAYED_WORK(&hmbird_watchdog_work, hmbird_watchdog_workfn);
 +	INIT_WORK(&hmbird_err_exit_work, hmbird_err_exit_workfn);
 +	hmbird_misc_init();
 +
 +	panic_blk_init();
++	return;
++
++err_free_boot_state:
++	if (cpu_states) {
++		for_each_possible_cpu(cpu) {
++			struct hmbird_rq *hrq = cpu_states[cpu].hrq;
++
++			if (hrq) {
++				free_cpumask_var(hrq->cpus_to_kick);
++				free_cpumask_var(hrq->cpus_to_preempt);
++				free_cpumask_var(hrq->cpus_to_wait);
++			}
++			kfree(cpu_states[cpu].ops);
++			kfree(hrq);
++		}
++		kfree(cpu_states);
++	}
++	kfree(init_hmbird);
++#ifdef CONFIG_SMP
++	free_cpumask_var(idle_masks.cpu);
++	free_cpumask_var(idle_masks.smt);
++#ifdef CONFIG_CPUMASK_OFFSTACK
++	idle_masks.cpu = NULL;
++	idle_masks.smt = NULL;
++#endif
++#endif
++	free_isolate_cpus();
++	set_hmbird_module_loaded(0);
++	pr_err("hmbird: boot state allocation failed; scheduler remains disabled\n");
 +}
 +
 diff --git a/kernel/sched/hmbird/hmbird_misc.c b/kernel/sched/hmbird/hmbird_misc.c
 new file mode 100644
 --- /dev/null
 +++ b/kernel/sched/hmbird/hmbird_misc.c
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,150 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +
 +/*
@@ -6073,8 +6189,10 @@ new file mode 100644
 +				sleep_now = div64_u64(sleep_now, 1000);
 +				usleep_range_state(sleep_now, sleep_now, TASK_IDLE);
 +			}
++			raw_spin_lock_irqsave(&ys->lock, flags);
 +			ys->sleep_times++;
 +			ys->last_yield_time = sched_clock();
++			raw_spin_unlock_irqrestore(&ys->lock, flags);
 +			return;
 +		}
 +		if (ys->sleep_times)
@@ -6134,7 +6252,7 @@ diff --git a/kernel/sched/hmbird/hmbird_oplus_compat.c b/kernel/sched/hmbird/hmb
 new file mode 100644
 --- /dev/null
 +++ b/kernel/sched/hmbird/hmbird_oplus_compat.c
-@@ -0,0 +1,234 @@
+@@ -0,0 +1,247 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +
 +#include <linux/mutex.h>
@@ -6352,21 +6470,34 @@ new file mode 100644
 +{
 +	struct proc_dir_entry *oplus_scheduler;
 +	struct proc_dir_entry *sched_assist;
++	struct proc_dir_entry *sched_prop;
++	struct proc_dir_entry *ux_task;
 +
 +	oplus_scheduler = proc_mkdir("oplus_scheduler", NULL);
 +	if (!oplus_scheduler)
 +		return -ENOMEM;
 +	sched_assist = proc_mkdir("sched_assist", oplus_scheduler);
 +	if (!sched_assist)
-+		return -ENOMEM;
++		goto err_remove_oplus_scheduler;
 +
-+	if (!proc_create("sched_prop", 0600, sched_assist,
-+			 &hmbird_sched_prop_ops))
-+		return -ENOMEM;
-+	if (!proc_create("ux_task", 0600, sched_assist, &hmbird_ux_task_ops))
-+		return -ENOMEM;
++	sched_prop = proc_create("sched_prop", 0600, sched_assist,
++				 &hmbird_sched_prop_ops);
++	if (!sched_prop)
++		goto err_remove_sched_assist;
++	ux_task = proc_create("ux_task", 0600, sched_assist,
++			      &hmbird_ux_task_ops);
++	if (!ux_task)
++		goto err_remove_sched_prop;
 +
 +	return 0;
++
++err_remove_sched_prop:
++	proc_remove(sched_prop);
++err_remove_sched_assist:
++	proc_remove(sched_assist);
++err_remove_oplus_scheduler:
++	proc_remove(oplus_scheduler);
++	return -ENOMEM;
 +}
 +device_initcall(hmbird_oplus_compat_init);
 diff --git a/kernel/sched/hmbird/hmbird_oplus_compat.h b/kernel/sched/hmbird/hmbird_oplus_compat.h
@@ -6476,7 +6607,7 @@ diff --git a/kernel/sched/hmbird/hmbird_sched_proc.c b/kernel/sched/hmbird/hmbir
 new file mode 100644
 --- /dev/null
 +++ b/kernel/sched/hmbird/hmbird_sched_proc.c
-@@ -0,0 +1,660 @@
+@@ -0,0 +1,664 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (C) 2024 Oplus. All rights reserved.
@@ -6935,205 +7066,209 @@ new file mode 100644
 +
 +	/* /proc/hmbird_sched--begin */
 +	HMBIRD_CREATE_PROC_ENTRY("abi_version", HMBIRD_PROC_READ_PERMISSION,
-+				 hmbird_dir, &hmbird_abi_version_proc_ops);
++				 hmbird_dir, &hmbird_abi_version_proc_ops, err_remove_hmbird_dir);
 +	HMBIRD_CREATE_PROC_ENTRY("actual_state", HMBIRD_PROC_READ_PERMISSION,
-+				 hmbird_dir, &hmbird_actual_state_proc_ops);
++				 hmbird_dir, &hmbird_actual_state_proc_ops, err_remove_hmbird_dir);
 +	HMBIRD_CREATE_PROC_ENTRY("last_exit_reason", HMBIRD_PROC_READ_PERMISSION,
-+				 hmbird_dir, &hmbird_last_exit_reason_proc_ops);
++				 hmbird_dir, &hmbird_last_exit_reason_proc_ops, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("scx_enable", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&scx_enable_proc_ops,
-+					&scx_enable);
++					&scx_enable, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("partial_ctrl", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&partial_enable);
++					&partial_enable, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("cpuctrl_high", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&cpuctrl_high_ratio);
++					&cpuctrl_high_ratio, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("cpuctrl_low", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&cpuctrl_low_ratio);
++					&cpuctrl_low_ratio, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("slim_stats", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&slim_stats);
++					&slim_stats, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("hmbirdcore_debug", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&hmbirdcore_debug);
++					&hmbirdcore_debug, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("slim_for_app", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&slim_for_app);
++					&slim_for_app, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("misfit_ds", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&misfit_ds);
++					&misfit_ds, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("scx_shadow_tick_enable", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&highres_tick_ctrl);
++					&highres_tick_ctrl, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("highres_tick_ctrl_dbg", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&highres_tick_ctrl_dbg);
++					&highres_tick_ctrl_dbg, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("cpu7_tl", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&cpu7_tl);
++					&cpu7_tl, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("cpu_cluster_masks", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&cpu_cluster_masks_proc_ops,
-+					&cpu_cluster_masks);
++					&cpu_cluster_masks, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("heartbeat", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&heartbeat);
++					&heartbeat, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("heartbeat_enable", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&heartbeat_enable);
++					&heartbeat_enable, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("watchdog_enable", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&watchdog_enable);
++					&watchdog_enable, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("isolate_ctrl", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&isolate_ctrl);
++					&isolate_ctrl, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("parctrl_high_ratio", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&parctrl_high_ratio);
++					&parctrl_high_ratio, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("parctrl_low_ratio", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&parctrl_low_ratio);
++					&parctrl_low_ratio, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("isoctrl_high_ratio", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&isoctrl_high_ratio);
++					&isoctrl_high_ratio, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("isoctrl_low_ratio", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&isoctrl_low_ratio);
++					&isoctrl_low_ratio, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("iso_free_rescue", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&iso_free_rescue);
++					&iso_free_rescue, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("parctrl_high_ratio_l", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&parctrl_high_ratio_l);
++					&parctrl_high_ratio_l, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("parctrl_low_ratio_l", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&parctrl_low_ratio_l);
++					&parctrl_low_ratio_l, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY("hmbird_stats", HMBIRD_PROC_READ_PERMISSION,
 +					hmbird_dir,
-+					&hmbird_stats_proc_ops);
++					&hmbird_stats_proc_ops, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("yield_opt", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&yield_opt_proc_ops,
-+					&yield_opt_params);
++					&yield_opt_params, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("boost_policy", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&boost_policy_proc_ops,
-+					&boost_policy_params);
++					&boost_policy_params, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("tick_hit", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&tick_hit_proc_ops,
-+					&tick_hit_params);
++					&tick_hit_params, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("hmbird_preempt_policy", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&hmbird_preempt_policy);
++					&hmbird_preempt_policy, err_remove_hmbird_dir);
 +	/* /proc/hmbird_sched--end */
 +
 +	/* mkdir /proc/hmbird_sched/slim_walt */
 +	load_track_dir = proc_mkdir(LOAD_TRACK_DIR, hmbird_dir);
 +	if (!load_track_dir) {
 +		pr_err("Error creating proc directory %s\n", LOAD_TRACK_DIR);
-+		return -ENOMEM;
++		goto err_remove_hmbird_dir;
 +	}
 +
 +	/* /proc/hmbird_sched/slim_walt--begin */
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("slim_walt_ctrl", HMBIRD_PROC_PERMISSION,
 +					load_track_dir,
 +					&slim_walt_ctrl_proc_ops,
-+					&slim_walt_ctrl);
++					&slim_walt_ctrl, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("slim_walt_dump", HMBIRD_PROC_PERMISSION,
 +					load_track_dir,
 +					&hmbird_common_proc_ops,
-+					&slim_walt_dump);
++					&slim_walt_dump, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("slim_walt_policy", HMBIRD_PROC_PERMISSION,
 +					load_track_dir,
 +					&hmbird_common_proc_ops,
-+					&slim_walt_policy);
++					&slim_walt_policy, err_remove_hmbird_dir);
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("frame_per_sec", HMBIRD_PROC_PERMISSION,
 +					load_track_dir,
 +					&sched_ravg_window_frame_per_sec_proc_ops,
-+					&sched_ravg_window_frame_per_sec);
++					&sched_ravg_window_frame_per_sec, err_remove_hmbird_dir);
 +	/* /proc/hmbird_sched/slim_walt--end */
 +
 +	/* mkdir /proc/hmbird_sched/slim_freq_gov */
 +	freq_gov_dir = proc_mkdir(SLIM_FREQ_GOV_DIR, hmbird_dir);
 +	if (!freq_gov_dir) {
 +		pr_err("Error creating proc directory %s\n", SLIM_FREQ_GOV_DIR);
-+		return -ENOMEM;
++		goto err_remove_hmbird_dir;
 +	}
 +
 +	/* /proc/hmbird_sched/slim_freq_gov--begin */
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("slim_gov_debug", HMBIRD_PROC_PERMISSION,
 +					freq_gov_dir,
 +					&hmbird_common_proc_ops,
-+					&slim_gov_debug);
++					&slim_gov_debug, err_remove_hmbird_dir);
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("scx_gov_ctrl", HMBIRD_PROC_PERMISSION,
 +					freq_gov_dir,
 +					&hmbird_common_proc_ops,
-+					&scx_gov_ctrl);
++					&scx_gov_ctrl, err_remove_hmbird_dir);
 +	/* /proc/hmbird_sched/slim_freq_gov--end */
 +
 +	HMBIRD_CREATE_PROC_ENTRY_DATA("cluster_separate", HMBIRD_PROC_PERMISSION,
 +					hmbird_dir,
 +					&hmbird_common_proc_ops,
-+					&cluster_separate);
++					&cluster_separate, err_remove_hmbird_dir);
 +
 +	return 0;
++
++err_remove_hmbird_dir:
++	remove_proc_subtree(HMBIRD_SCHED_PROC_DIR, NULL);
++	return -ENOMEM;
 +}
 +
 +device_initcall(hmbird_proc_init);
@@ -7149,19 +7284,19 @@ new file mode 100644
 +#include <linux/proc_fs.h>
 +#include <linux/seq_file.h>
 +
-+#define HMBIRD_CREATE_PROC_ENTRY(name, mode, parent, proc_ops) \
++#define HMBIRD_CREATE_PROC_ENTRY(name, mode, parent, proc_ops, err_label) \
 +	do { \
 +		if (!proc_create(name, mode, parent, proc_ops)) { \
 +			pr_err("Error creating proc entry %s\n", name); \
-+			return -ENOMEM; \
++			goto err_label; \
 +		} \
 +	} while (0)
 +
-+#define HMBIRD_CREATE_PROC_ENTRY_DATA(name, mode, parent, proc_ops, data) \
++#define HMBIRD_CREATE_PROC_ENTRY_DATA(name, mode, parent, proc_ops, data, err_label) \
 +	do { \
 +		if (!proc_create_data(name, mode, parent, proc_ops, data)) { \
 +			pr_err("Error creating proc entry with data %s\n", name); \
-+			return -ENOMEM; \
++			goto err_label; \
 +		} \
 +	} while (0)
 +
@@ -8320,3 +8455,14 @@ diff --git a/kernel/time/tick-sched.c b/kernel/time/tick-sched.c
  
  	/*
  	 * If tick_nohz_get_sleep_length() ran tick_nohz_next_event(), the
+diff --git a/tools/include/uapi/linux/sched.h b/tools/include/uapi/linux/sched.h
+--- a/tools/include/uapi/linux/sched.h
++++ b/tools/include/uapi/linux/sched.h
+@@ -118,6 +118,7 @@
+ /* SCHED_ISO: reserved but not implemented yet */
+ #define SCHED_IDLE		5
+ #define SCHED_DEADLINE		6
++#define SCHED_HMBIRD		7
+ 
+ /* Can be ORed in to make sure the process is reverted back to SCHED_NORMAL on fork */
+ #define SCHED_RESET_ON_FORK     0x40000000
