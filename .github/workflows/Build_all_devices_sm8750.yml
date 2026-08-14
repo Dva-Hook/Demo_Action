@@ -45,6 +45,12 @@ on:
         default: false
         type: boolean
 
+      enable_Droidspaces:
+        description: "添加 Droidspaces 支持"
+        required: true
+        default: false
+        type: boolean
+
       enable_Adios:
         description: "添加 ADIOS IO调度器支持"
         required: true
@@ -114,6 +120,7 @@ jobs:
       ENABLE_SERIALID_CHECK:  ${{ github.event.inputs.enable_serialid_check }}
       ENABLE_KSU:             ${{ github.event.inputs.enable_ksu }}
       ENABLE_SUSFS:           ${{ github.event.inputs.enable_susfs }}
+      ENABLE_DROIDSPACES:     ${{ github.event.inputs.enable_Droidspaces }}
 
     outputs:
       ksuver: ${{ steps.ksu_step.outputs.ksuver }}
@@ -249,12 +256,6 @@ jobs:
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6991/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip && 
             mv "android_kernel_oneplus_mt6991-oneplus-${REPO_MANIFEST}" common
-          elif [ "${DEVICES_NAME}" = "oneplus_ace5_pro" ] || [ "${DEVICES_NAME}" = "oneplus_13t" ] || [ "${DEVICES_NAME}" = "oneplus_13" ]; then
-            echo "使用 xkse4 源码分支: oneplus/sm8750_b_16.0.0_oneplus_13"
-            aria2c -s16 -x16 -k1M "https://github.com/xkse4/android_kernel_common_oneplus_sm8750/archive/refs/heads/oneplus/sm8750_b_16.0.0_oneplus_13.zip" -o common.zip
-            unzip -q common.zip &&
-            mv android_kernel_common_oneplus_sm8750-* common
-            cp common/arch/arm64/configs/xkse4_dodge_defconfig common/arch/arm64/configs/gki_defconfig
           else
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_common_oneplus_sm8750/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip && 
@@ -285,6 +286,9 @@ jobs:
           echo "CCACHE_MAXSIZE=10G" >> $GITHUB_ENV
           # 根据影响源码的功能开关生成缓存变体后缀，避免不同变体互相污染
           CACHE_VARIANT=""
+          if [ "${{ env.ENABLE_DROIDSPACES }}" = "true" ]; then
+            CACHE_VARIANT="${CACHE_VARIANT}-ds"
+          fi
           echo "CACHE_VARIANT=$CACHE_VARIANT" >> $GITHUB_ENV
           echo "当前构建内核机型：${{ env.DEVICES_NAME }}，缓存变体：${CACHE_VARIANT:-(无)}"
           echo "当前磁盘空间："
@@ -508,6 +512,65 @@ jobs:
               echo "⚠️ 不支持的内核版本: $TARGET"
             fi
           
+      - name: "🔧 应用 Droidspaces 补丁"
+        if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
+        run: |
+          echo "正在启用 Droidspaces 容器支持..."
+            cd kernel_workspace/common
+            # 应用 Droidspaces 容器必须补丁
+            wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/droidspaces_patch/fix_sysvipc_kabi_6_7_8.patch
+            patch -p1 -F 3 < fix_sysvipc_kabi_6_7_8.patch || true
+            # 修补 oplus_bsp_midas 行为，避免开机崩溃
+            wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/droidspaces_patch/fix_oplus_bsp_midas.patch
+            patch -p1 -F 3 < fix_oplus_bsp_midas.patch || true
+            # 应用 NTSync 补丁
+            wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/droidspaces_patch/ntsync_base.patch
+            wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/droidspaces_patch/ntsync_compat_${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch
+            patch -p1 -F 3 < ntsync_base.patch || true
+            patch -p1 -F 3 < ntsync_compat_${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch || true
+            # 开启 Droidspaces 容器所需内核支持
+            echo "CONFIG_PID_NS=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_IPC_NS=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_USER_NS=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_SYSVIPC=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_DEVTMPFS=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NAMESPACES=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_POSIX_MQUEUE=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_TARGET_LOG=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "CONFIG_NETFILTER_XT_MATCH_RECENT=y" >> ./arch/arm64/configs/gki_defconfig
+            # 未经测试的配置选项，可能导致bug
+            #echo "CONFIG_CGROUP_DEVICE=y" >> ./arch/arm64/configs/gki_defconfig
+            #echo "CONFIG_CGROUP_PIDS=y" >> ./arch/arm64/configs/gki_defconfig
+            #echo "CONFIG_FW_LOADER_COMPRESS=y" >> ./arch/arm64/configs/gki_defconfig
+            #echo "CONFIG_BRIDGE_NETFILTER=y" >> ./arch/arm64/configs/gki_defconfig
+            #echo "CONFIG_NF_TABLES=y" >> ./arch/arm64/configs/gki_defconfig
+            # 开启 NTSync
+            echo "CONFIG_NTSYNC=y" >> ./arch/arm64/configs/gki_defconfig
+            if [[ "${{ github.event.inputs.droidspaces_enable }}" == "extend" ]]; then
+              echo "正在启用容器环境扩展支持..."
+              # 开启虚拟 HCI 设备支持
+              echo "CONFIG_BT_HCIVHCI=y" >> ./arch/arm64/configs/gki_defconfig
+              # 开启 systemd-coredump 支持
+              echo "CONFIG_STATIC_USERMODEHELPER=n" >> ./arch/arm64/configs/gki_defconfig
+              # 添加 Lindroid EVDI DRM 驱动
+              wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/droidspaces_patch/evdi_drm.patch
+              patch -p1 -F 3 < evdi_drm.patch || true
+              echo "CONFIG_DRM_LINDROID_EVDI=y" >> ./arch/arm64/configs/gki_defconfig
+            fi
+            # 开启 NTSync
+            echo "CONFIG_NTSYNC=y" >> ./arch/arm64/configs/gki_defconfig
+            echo "正在启用容器环境扩展支持..."
+            # 开启虚拟 HCI 设备支持
+            echo "CONFIG_BT_HCIVHCI=y" >> ./arch/arm64/configs/gki_defconfig
+            # 开启 systemd-coredump 支持
+            echo "CONFIG_STATIC_USERMODEHELPER=n" >> ./arch/arm64/configs/gki_defconfig
+            # 添加 Lindroid EVDI DRM 驱动
+            wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/$main/droidspaces_patch/evdi_drm.patch
+            patch -p1 -F 3 < evdi_drm.patch || true
+            echo "CONFIG_DRM_LINDROID_EVDI=y" >> ./arch/arm64/configs/gki_defconfig
+
+      
       - name: 🔧 Add adios_ioscheduler (添加 adios_ioscheduler 支持)
         if: ${{ env.ENABLE_ADIOS == 'true' }}
         working-directory: kernel_workspace/common
