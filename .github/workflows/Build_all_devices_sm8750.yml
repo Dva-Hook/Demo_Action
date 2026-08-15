@@ -547,26 +547,13 @@ jobs:
             #echo "CONFIG_NF_TABLES=y" >> ./arch/arm64/configs/gki_defconfig
             # 开启 NTSync
             echo "CONFIG_NTSYNC=y" >> ./arch/arm64/configs/gki_defconfig
-            if [[ "${{ github.event.inputs.droidspaces_enable }}" == "extend" ]]; then
-              echo "正在启用容器环境扩展支持..."
-              # 开启虚拟 HCI 设备支持
-              echo "CONFIG_BT_HCIVHCI=y" >> ./arch/arm64/configs/gki_defconfig
-              # 开启 systemd-coredump 支持
-              echo "CONFIG_STATIC_USERMODEHELPER=n" >> ./arch/arm64/configs/gki_defconfig
-              # 添加 Lindroid EVDI DRM 驱动
-              wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/droidspaces_patch/evdi_drm.patch
-              patch -p1 -F 3 < evdi_drm.patch || true
-              echo "CONFIG_DRM_LINDROID_EVDI=y" >> ./arch/arm64/configs/gki_defconfig
-            fi
-            # 开启 NTSync
-            echo "CONFIG_NTSYNC=y" >> ./arch/arm64/configs/gki_defconfig
             echo "正在启用容器环境扩展支持..."
             # 开启虚拟 HCI 设备支持
             echo "CONFIG_BT_HCIVHCI=y" >> ./arch/arm64/configs/gki_defconfig
             # 开启 systemd-coredump 支持
             echo "CONFIG_STATIC_USERMODEHELPER=n" >> ./arch/arm64/configs/gki_defconfig
             # 添加 Lindroid EVDI DRM 驱动
-            wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/$main/droidspaces_patch/evdi_drm.patch
+            wget https://github.com/cctv18/oppo_oplus_realme_sm8750/raw/refs/heads/main/droidspaces_patch/evdi_drm.patch
             patch -p1 -F 3 < evdi_drm.patch || true
             echo "CONFIG_DRM_LINDROID_EVDI=y" >> ./arch/arm64/configs/gki_defconfig
 
