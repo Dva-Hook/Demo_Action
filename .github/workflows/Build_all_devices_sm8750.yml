@@ -821,7 +821,7 @@ jobs:
           cp ./Image "./${IMAGENAME}"
 
       - name: 📤 Upload Image (上传 Image)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
          name: Image_${{ matrix.device_name }}_${{ env.KSUVER }}
          path: kernel_workspace/common/out/arch/arm64/boot/${{ env.IMAGENAME }}
@@ -836,7 +836,7 @@ jobs:
           rm -rf ./AnyKernel3/Image
           
       - name: 📤 Upload AnyKernel3 (上传 AnyKernel3)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
          name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}_ReSuKiSU
          path: ./AnyKernel3/*
@@ -929,7 +929,7 @@ jobs:
           ls -lR "$ARTIFACT_NAME"
 
       - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}
           path: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}
@@ -944,7 +944,7 @@ jobs:
       actions: read
     steps:
       - name: 📥 Download all artifacts (下载所有构建产物)
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           pattern: "*"
           path: ./release_assets

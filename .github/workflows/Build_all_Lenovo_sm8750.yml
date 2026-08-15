@@ -926,7 +926,7 @@ jobs:
           cp ./Image "./kernel"
 
       - name: 📤 Upload Image (上传 Image)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
          name: kernel_image_${{ env.KERNEL_VERSION }}
          path: kernel_workspace/common/out/arch/arm64/boot/kernel
@@ -950,7 +950,7 @@ jobs:
 
       - name: 📤 Upload Signed boot (上传已签名的 boot)
         if: ${{ env.ENABLE_SIGNED == 'true' }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
          name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_ReSukiSU_AOSP_Signed
          path: kernel_workspace/boot_avb_tool/AOSP-Testkey-BootSigner-main/boot.img
@@ -1043,7 +1043,7 @@ jobs:
           ls -lR "$ARTIFACT_NAME"
 
       - name: 📤 Upload Re-Kernel module (上传 Re-Kernel 模块)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}
           path: Re-Kernel-v${{ steps.download-rekernel.outputs.version-number }}
