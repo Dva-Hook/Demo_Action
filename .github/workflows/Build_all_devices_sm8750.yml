@@ -85,7 +85,7 @@ on:
 jobs:
   prepare_matrix:
     name: Prepare Matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       devices: ${{ steps.set-matrix.outputs.devices }}
     steps:
@@ -104,7 +104,7 @@ jobs:
   build_matrix:
     name: Build_${{ matrix.device_name }}
     needs: prepare_matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -867,7 +867,7 @@ jobs:
     name: Upload Re-Kernel Module
     if: ${{ github.event.inputs.enable_ReKernel == 'true' }}
     needs: build_matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: 🔎 Find Re-Kernel module zip (查找Re-Kernel最新模块并下载)
         id: download-rekernel
@@ -960,7 +960,7 @@ jobs:
     name: 📤 Create Release (创建发布)
     needs: [prepare_matrix, build_matrix, upload_rekernel]
     if: always() && needs.build_matrix.result != 'failure'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
       actions: read
