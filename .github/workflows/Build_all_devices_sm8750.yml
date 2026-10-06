@@ -631,13 +631,13 @@ jobs:
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./security/Kconfig
 
           
-      - name: ⚙️ Set ReSukiSU (设置ReSukiSU)
+      - name: ⚙️ Set BakaSU (设置BakaSU)
         if: ${{ env.ENABLE_KSU == 'true' }}
         id: ksu_step
         run: |
           cd kernel_workspace
-          echo "正在配置ReSukiSU..."
-          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s main
+          echo "正在配置BakaSU..."
+          curl -LSs "https://raw.githubusercontent.com/BakaSU/BakaSU/refs/heads/main/kernel/setup.sh" | bash -s main
           cd ./KernelSU 
           KSU_VERSION=$(expr $(git rev-list --count main) + 30700 2>/dev/null || echo 114514)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
@@ -860,7 +860,7 @@ jobs:
       - name: 📤 Upload AnyKernel3 (上传 AnyKernel3)
         uses: actions/upload-artifact@v7
         with:
-         name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}_ReSuKiSU
+         name: AK3_${{ env.KSUVER }}_${{ matrix.device_name }}_BakaSU
          path: ./AnyKernel3/*
 
   upload_rekernel:
@@ -1032,7 +1032,7 @@ jobs:
           fi
 
           if [ "${{ github.event.inputs.enable_ksu }}" = "true" ]; then
-            FEATURES="${FEATURES}- ✅ 集成ReSukiSU"$'\n'
+            FEATURES="${FEATURES}- ✅ 集成BakaSU"$'\n'
           fi
           if [ "${{ github.event.inputs.enable_susfs }}" = "true" ]; then
             FEATURES="${FEATURES}- ✅ SUSFS 挂载支持"$'\n'
@@ -1055,7 +1055,7 @@ jobs:
           ### 📱 SM8750 欧加真通用内核 | 构建信息
 
           - **内核版本**: SM8750 (Android 15 / 6.6)
-          - **ReSukiSU 版本**: ${KSU_VER}
+          - **BakaSU 版本**: ${KSU_VER}
           - **编译时间**: ${TIME_FORM}
           - **编译机型** (${DEVICE_COUNT} 个): ${DEVICE_LIST}
           - **内核后缀**: ${KERNEL_SUFFIX}
@@ -1069,18 +1069,18 @@ jobs:
           ${FEATURES}
           ### ⏫️ 更新内容
 
-          - 更新 ReSukiSU 至最新版本 (${KSU_VER})
+          - 更新 BakaSU 至最新版本 (${KSU_VER})
           - 同步上游内核源码
 
           ### 📋 安装方法 | Installation Guide
 
-          1. 若你已刷入 ReSukiSU 内核，且 ReSukiSU 管理器已更新至最新版本，可在管理器中直接刷入 AnyKernel 刷机包并重启；
+          1. 若你已刷入 BakaSU 内核，且 BakaSU 管理器已更新至最新版本，可在管理器中直接刷入 AnyKernel 刷机包并重启；
           2. 由于 KernelSU 上游更新了元模块功能，最新版 KSU 管理器需要配合元模块 (metamodule) 才能正常挂载模块。目前的元模块包括 [meta overlayfs](https://github.com/KernelSU-Modules-Repo/meta-overlayfs), [mountify](https://github.com/backslashxx/mountify), [meta magicmount](https://github.com/7a72/meta-magic_mount/) 等。若你是第一次使用 KSU 或刚从旧版 KSU 管理器升级至新版，请先安装一个元模块；
           3. 若启用 Re-Kernel，需刷入配套Re-Kernel模块并配合 NoActive 软件使用，以提升后台冻结能力。
 
           #### 🔗 相关链接
 
-          - ReSukiSU 管理器: [ReSukiSU_CI](https://github.com/cctv18/ReSukiSU_CI/releases)
+          - BakaSU 管理器: [BakaSU_CI](https://github.com/cctv18/BakaSU_CI/releases)
           - SukiSU Ultra 管理器: [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases)
           - KernelSU Next 管理器: [KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next/releases)
           - KernelSU 原版管理器: [KernelSU](https://github.com/tiann/KernelSU/releases)
