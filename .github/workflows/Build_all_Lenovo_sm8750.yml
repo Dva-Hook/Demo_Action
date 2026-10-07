@@ -73,12 +73,6 @@ on:
         default: true
         type: boolean
 
-      enable_kpm:
-        description: "启用KPM"
-        required: false
-        default: true
-        type: boolean
-      
       enable_susfs:
         description: "启用SUSFS"
         required: true
@@ -131,7 +125,6 @@ jobs:
       ENABLE_DROIDSPACES_NTSYNC: ${{ github.event.inputs.enable_droidspaces_ntsync }}
       ENABLE_BBG: ${{ github.event.inputs.enable_bbg }}
       ENABLE_KSU: ${{ github.event.inputs.enable_ksu }}
-      ENABLE_KPM: ${{ github.event.inputs.enable_kpm }}
       ENABLE_SUSFS: ${{ github.event.inputs.enable_susfs }}
       ENABLE_SIGNED: ${{ github.event.inputs.enable_signed }}
     steps:
@@ -712,7 +705,6 @@ jobs:
           # ==================== KSU 配置 ====================
           if [ "${{ env.ENABLE_KSU }}" = "true" ]; then
             echo "CONFIG_KSU=y" >> "$DEFCONFIG"
-            echo "CONFIG_KPM=y" >> "$DEFCONFIG"
 
             echo 'CONFIG_KSU_FULL_NAME_FORMAT="%TAG_NAME%-%COMMIT_SHA%-Re-TG@qdykernel"' >> "$DEFCONFIG"
 
@@ -909,44 +901,6 @@ jobs:
 
             core.info(`旧缓存清理完成，共删除 ${deleted} 个缓存`);
 
-      - name: 📦 Apply KPM and patch the kernel (应用KPM并修补内核)
-        if: ${{ env.ENABLE_KPM == 'true' }}
-        run: |
-          echo "正在应用KPM并修补内核..."
-          cd kernel_workspace/common/out/arch/arm64/boot
-
-          download_patch_linux() {
-            local max_retries=5
-            local retry_delay=10
-            local attempt=1
-
-            while [ $attempt -le $max_retries ]; do
-              echo "  尝试下载 patch_linux (第 ${attempt}/${max_retries} 次)..."
-              curl -L --connect-timeout 30 --max-time 300 \
-                -o patch_linux \
-                https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.12.2/patch_linux
-
-              if [ -s patch_linux ] && ! head -c 100 patch_linux | grep -qi '<html'; then
-                local fsize=$(stat -c%s patch_linux 2>/dev/null || stat -f%z patch_linux 2>/dev/null || echo 0)
-                echo "  ✅ patch_linux 下载成功 (大小: ${fsize} bytes)"
-                return 0
-              fi
-
-              rm -f patch_linux
-              sleep $retry_delay
-              attempt=$((attempt + 1))
-            done
-
-            echo "::error::patch_linux 下载失败，已重试 ${max_retries} 次"
-            return 1
-          }
-
-          download_patch_linux || exit 1
-          chmod +x patch_linux
-          ./patch_linux
-          rm -f Image
-          mv oImage Image
-          
       - name: 📦 ReName Image  (修改镜像名)
         run: |
           cd kernel_workspace/common/out/arch/arm64/boot
