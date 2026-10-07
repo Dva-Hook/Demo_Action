@@ -57,9 +57,20 @@ on:
         type: boolean
 
       enable_droidspaces:
-        description: "添加 Droidspaces"
+        description: "Droidspaces 容器支持（推荐678槽位）"
         required: true
-        default: false
+        default: "678"
+        type: choice
+        options:
+          - "off"
+          - "678"
+          - "123"
+          - "345"
+
+      enable_droidspaces_ntsync:
+        description: "启用 Droidspaces 容器 NTSync 支持（需启用 Droidspaces）"
+        required: false
+        default: true
         type: boolean
 
       enable_kpm:
@@ -117,6 +128,7 @@ jobs:
       ENABLE_REKERNEL: ${{ github.event.inputs.enable_ReKernel }}
       ENABLE_ADIOS: ${{ github.event.inputs.enable_Adios }}
       ENABLE_DROIDSPACES: ${{ github.event.inputs.enable_droidspaces }}
+      ENABLE_DROIDSPACES_NTSYNC: ${{ github.event.inputs.enable_droidspaces_ntsync }}
       ENABLE_BBG: ${{ github.event.inputs.enable_bbg }}
       ENABLE_KSU: ${{ github.event.inputs.enable_ksu }}
       ENABLE_KPM: ${{ github.event.inputs.enable_kpm }}
@@ -547,12 +559,12 @@ jobs:
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./common/security/Kconfig
 
       
-      - name: ⚙️ Set ReSukiSU (设置ReSukiSU)
+      - name: ⚙️ Set BakaSU (设置BakaSU)
         if: ${{ env.ENABLE_KSU == 'true' }}
         run: |
           cd kernel_workspace
-          echo "正在配置ReSukiSU..."
-          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/refs/heads/main/kernel/setup.sh" | bash -s main
+          echo "正在配置BakaSU..."
+          curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/refs/heads/main/kernel/setup.sh" | bash -s main
           cd ./KernelSU 
           KSU_VERSION=$(expr $(git rev-list --count origin/main 2>/dev/null) + 30700 2>/dev/null || echo 114514)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
@@ -578,39 +590,54 @@ jobs:
               ;;
           esac
 
-      - name: 🔧 Apply Droidspaces SYSVIPC kABI fix (应用 Droidspaces SYSVIPC kABI 修复)
-        if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
+      - name: 🔧 Clone Droidspaces Patches (克隆 Droidspaces 补丁仓库)
+        if: ${{ env.ENABLE_DROIDSPACES != 'off' }}
+        run: |
+          git clone --depth 1 https://github.com/ravindu644/Droidspaces-OSS.git /tmp/Droidspaces-OSS
+          echo "DROIDSPACES_PATCHES=/tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI" >> $GITHUB_ENV
+
+      - name: 🔧 Apply Droidspaces SYSVIPC kABI fix (集成 Droidspaces 支持)
+        if: ${{ env.ENABLE_DROIDSPACES != 'off' }}
         working-directory: kernel_workspace/common
         run: |
-          echo "==> 开始应用 Droidspaces SYSVIPC kABI 修复补丁..."
-          KABI_PATCH="${GITHUB_WORKSPACE}/patch/GKI-6.6-sysvipc_kabi_3_4_5.patch"
-          if [ ! -f "$KABI_PATCH" ]; then
-            echo "::error::未找到 Droidspaces SYSVIPC kABI 补丁: $KABI_PATCH"
+          KERNEL_VER="6.6"
+          SLOT="${{ env.ENABLE_DROIDSPACES }}"
+
+          # 678 -> 6_7_8, 123 -> 1_2_3, 345 -> 3_4_5
+          SLOT_NAME=$(echo "$SLOT" | sed 's/\(.\)/\1_/g; s/_$//')
+          echo "应用 Droidspaces SYSVIPC kABI 修复补丁 (槽位: $SLOT / $SLOT_NAME)..."
+
+          PATCH_FILE="$DROIDSPACES_PATCHES/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_${SLOT_NAME}.patch"
+
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "::error::未找到 Droidspaces SYSVIPC kABI 补丁: $PATCH_FILE"
             exit 1
           fi
-          if ! patch -p1 --forward < "$KABI_PATCH"; then
+
+          if ! patch -p1 --forward < "$PATCH_FILE"; then
             echo "::warning::SYSVIPC kABI 补丁应用失败，可能已应用或上下文不匹配"
           fi
-          echo "==> Droidspaces SYSVIPC kABI 修复完成"
 
-      - name: 🔧 Apply ntsync Patch (应用 ntsync 补丁)
-        if: ${{ env.ENABLE_DROIDSPACES == 'true' }}
+          echo "✅ Droidspaces SYSVIPC kABI 修复完成"
+
+      - name: 🔧 Apply NTSync Patch (注入 NTSync 内核配置)
+        if: ${{ env.ENABLE_DROIDSPACES != 'off' && env.ENABLE_DROIDSPACES_NTSYNC == 'true' }}
         working-directory: kernel_workspace/common
         run: |
-          echo "==> 开始应用 ntsync 补丁..."
-          for PATCH_NAME in "ntsync_base.patch" "ntsync_compat_6.6.patch"; do
-            PATCH_PATH="${GITHUB_WORKSPACE}/patch/${PATCH_NAME}"
-            if [ ! -f "$PATCH_PATH" ]; then
-              echo "::error::未找到 ntsync 补丁: $PATCH_PATH"
-              exit 1
-            fi
-            echo "  应用: $PATCH_NAME"
-            dos2unix "$PATCH_PATH"
-            if ! git apply --ignore-whitespace "$PATCH_PATH"; then
-              echo "::warning::补丁 $PATCH_NAME 应用失败，可能已应用或上下文不匹配"
-            fi
-          done
-          echo "==> ntsync 补丁应用完成"
+          set -e
+          echo "=== 开始注入 NTSync 内核补丁 ==="
+          echo "Kernel 版本: 6.6"
+
+          NTSYNC_PATCH="ntsync_compat_android15-6.6"
+
+          echo "自动选择 NTSync 补丁: ${NTSYNC_PATCH}.patch"
+          wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/ntsync_base.patch"
+          wget -q "https://raw.githubusercontent.com/Goldzxcbug/Droidspaces_Kernel_patch/refs/heads/main/NTsync/${NTSYNC_PATCH}.patch"
+
+          patch -p1 < "ntsync_base.patch"
+          patch -p1 < "${NTSYNC_PATCH}.patch"
+
+          echo "✅ NTSync 补丁应用完成"
 
       - name: 🔧 Set gki_defconfig (设置编译配置)
         run: |
@@ -952,7 +979,7 @@ jobs:
         if: ${{ env.ENABLE_SIGNED == 'true' }}
         uses: actions/upload-artifact@v7
         with:
-         name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_ReSukiSU_AOSP_Signed
+         name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_BakaSU_AOSP_Signed
          path: kernel_workspace/boot_avb_tool/AOSP-Testkey-BootSigner-main/boot.img
 
   upload_rekernel:
