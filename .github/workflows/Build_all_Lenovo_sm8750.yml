@@ -20,7 +20,7 @@ on:
           - '6.6.89'
           - '6.6.102'
           - '6.6.118'
-        default: '6.6.89'
+        default: '6.6.118'
         
       custom_kernel_suffix:
         description: "✏️ 自定义内核名称 (留空默认官核名称)"
@@ -149,7 +149,7 @@ jobs:
               ;;
             "6.6.118")
               echo "os_patch_level=2026-01" >> $GITHUB_ENV
-              echo "releases=TB322_ZUXOS_1.5.10.183" >> $GITHUB_ENV
+              echo "releases=ColorOS_17_103_OPD_Boot" >> $GITHUB_ENV
               ;;
           esac
            if [ -z "${{ env.CUSTOM_KERNEL_SUFFIX }}" ]; then
