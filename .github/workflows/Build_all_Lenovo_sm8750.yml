@@ -38,11 +38,15 @@ on:
         default: false
         type: boolean
 
-      enable_ksu:
-        description: "集成 KernelSU（基于内核的 Root 方案）"
+      su_variant:
+        description: "集成的 SU 变体（off = 不集成）"
         required: true
-        default: true
-        type: boolean
+        default: "BakaSU"
+        type: choice
+        options:
+          - "BakaSU"
+          - "FinaSU"
+          - "off"
 
       enable_ReKernel:
         description: "启用Re-Kernel支持"
@@ -124,7 +128,7 @@ jobs:
       ENABLE_DROIDSPACES: ${{ github.event.inputs.enable_droidspaces }}
       ENABLE_DROIDSPACES_NTSYNC: ${{ github.event.inputs.enable_droidspaces_ntsync }}
       ENABLE_BBG: ${{ github.event.inputs.enable_bbg }}
-      ENABLE_KSU: ${{ github.event.inputs.enable_ksu }}
+      SU_VARIANT: ${{ github.event.inputs.su_variant }}
       ENABLE_SUSFS: ${{ github.event.inputs.enable_susfs }}
       ENABLE_SIGNED: ${{ github.event.inputs.enable_signed }}
     steps:
@@ -553,18 +557,29 @@ jobs:
 
       
       - name: ⚙️ Set BakaSU (设置BakaSU)
-        if: ${{ env.ENABLE_KSU == 'true' }}
+        if: ${{ env.SU_VARIANT == 'BakaSU' }}
         run: |
           cd kernel_workspace
           echo "正在配置BakaSU..."
           curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/refs/heads/main/kernel/setup.sh" | bash -s main
-          cd ./KernelSU 
+          cd ./KernelSU
           KSU_VERSION=$(expr $(git rev-list --count origin/main 2>/dev/null) + 30700 2>/dev/null || echo 114514)
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
 
+      - name: ⚙️ Set FinaSU (设置FinaSU)
+        if: ${{ env.SU_VARIANT == 'FinaSU' }}
+        run: |
+          cd kernel_workspace
+          echo "正在配置FinaSU..."
+          curl -LSs "https://raw.githubusercontent.com/LyraVoid/FinaSU/main/kernel/setup.sh" | bash -s dev
+          cd ./FinaSU
+          KSU_VERSION=$(expr $(git rev-list --count HEAD 2>/dev/null) + 30000 2>/dev/null || echo 114514)
+          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+          echo "ksuver=$KSU_VERSION" >> $GITHUB_OUTPUT
+
       - name: 🔧 Set up SUSFS (配置 SUSFS)
-        if: ${{ env.ENABLE_SUSFS == 'true' && env.ENABLE_KSU == 'true' }}
+        if: ${{ env.ENABLE_SUSFS == 'true' && env.SU_VARIANT != 'off' }}
         run: |
           cd kernel_workspace
           git clone --depth=1 https://github.com/cctv18/susfs4oki.git susfs4ksu -b oki-android15-6.6
@@ -703,10 +718,12 @@ jobs:
           fi
 
           # ==================== KSU 配置 ====================
-          if [ "${{ env.ENABLE_KSU }}" = "true" ]; then
+          if [ "${{ env.SU_VARIANT }}" != "off" ]; then
             echo "CONFIG_KSU=y" >> "$DEFCONFIG"
 
-            echo 'CONFIG_KSU_FULL_NAME_FORMAT="%TAG_NAME%-%COMMIT_SHA%-BaKa-TG@qdykernel"' >> "$DEFCONFIG"
+            if [ "${{ env.SU_VARIANT }}" = "BakaSU" ]; then
+              echo 'CONFIG_KSU_FULL_NAME_FORMAT="%TAG_NAME%-%COMMIT_SHA%-BaKa-TG@qdykernel"' >> "$DEFCONFIG"
+            fi
 
             # ==================== SUSFS 配置 ====================
             if [ "${{ env.ENABLE_SUSFS }}" == 'true' ];then
@@ -729,7 +746,7 @@ jobs:
               echo "未启用SUSFS 跳过SUSFS配置"
             fi
           else
-            echo "未启用KSU，将不会内嵌Root及SUSFS"
+            echo "未启用SU，将不会内嵌Root及SUSFS"
           fi
           echo "CONFIG_TMPFS_XATTR=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -933,7 +950,7 @@ jobs:
         if: ${{ env.ENABLE_SIGNED == 'true' }}
         uses: actions/upload-artifact@v7
         with:
-         name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_BakaSU_AOSP_Signed
+         name: Boot_${{ env.KSUVER }}_${{ env.KERNEL_VERSION }}_${{ env.SU_VARIANT }}_AOSP_Signed
          path: kernel_workspace/boot_avb_tool/AOSP-Testkey-BootSigner-main/boot.img
 
   upload_rekernel:
